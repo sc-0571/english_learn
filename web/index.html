@@ -518,7 +518,10 @@
 
     html += '<div class="prog"><div class="row"><span>已作答 <b>' + done + '</b> / ' + total +
             '</span><span id="progPct">' + Math.round(done / total * 100) + '%</span></div>' +
-            '<div class="bar"><i id="progBar" style="width:' + (done / total * 100) + '%"></i></div></div>';
+            '<div class="bar"><i id="progBar" style="width:' + (done / total * 100) + '%"></i></div>' +
+            (done < total ? '<p class="dim2" style="margin:6px 0 0">不想做完全部也可以 —— ' +
+              '直接点下面的「提交并批改」，已答的会照常判分，做错的照常进错题本。</p>' : '') +
+            '</div>';
 
     quiz.parts.forEach(function (p, pi) {
       html += '<div class="card"><h2>' + esc(p.title) + ' <span class="dim2">' + p.items.length + ' 题</span></h2>';
@@ -627,14 +630,21 @@
   }
 
   function explainHtml(it, sel, answer, selText) {
-    var correct = sel === answer;
+    var answered = !(sel == null || sel === '');
+    if (!answered && !quiz.submitted) { /* 未提交时不该走到这里 */ }
+    var correct = answered && sel === answer;
     var ansLabel = String(answer);
     if (it.choices) {
-      it.choices.forEach(function (c) { if (c.key === answer) ansLabel = c.k + '. ' + c.t; });
+      it.choices.forEach(function (c) { if (c.k === answer) ansLabel = c.k + '. ' + c.t; });
+    } else if (it.srcAnswer != null && VA_PART_A && VA_PART_A.choices) {
+      // Part A 的字母在渲染时被重映射过，展示时用原始选项表，避免和题面字母对不上
+      VA_PART_A.choices.forEach(function (c) {
+        if (c.key === it.srcAnswer) ansLabel = c.key + '. ' + c.text;
+      });
     }
     var h = '<div class="exp' + (correct ? '' : ' bad') + '">';
-    if (sel == null || sel === '') {
-      h += '<span class="tag no">未作答</span> 正确答案：<b>' + esc(ansLabel) + '</b>';
+    if (!answered) {
+      h += '<span class="tag no">未作答</span>（不计入错题本）· 正确答案：<b>' + esc(ansLabel) + '</b>';
     } else if (correct) {
       h += '<span class="tag ok">✓ 正确</span>';
     } else {
@@ -682,6 +692,7 @@
     var delta = quiz.lastDelta || { added: 0, cleared: 0 };
     var left = mistakeKeys().length;
     h += '<p class="dim2" style="margin-top:10px">';
+    if (quiz.skipped) h += '未作答 <b>' + quiz.skipped + '</b> 题（不计入错题本）；';
     if (delta.added) h += '本次新增错题 <b style="color:var(--bad)">' + delta.added + '</b> 题；';
     if (delta.cleared) h += '答对并清出错题本 <b style="color:var(--ok)">' + delta.cleared + '</b> 题；';
     h += '错题本现有 <b>' + left + '</b> 题。';
@@ -764,18 +775,38 @@
   }
 
   function submitQuiz() {
+    // 先检查有没有漏答 —— 没作答不等于答错，不应记进错题本，
+    // 但要让用户有机会回去补完（早期版本把空答案一律算错题，
+    // 结果做 3 题就提交会把错题本塞满 47 道"空题"，真正的错题反而被淹没）。
+    var unanswered = allItems().filter(function (it) {
+      var v = quiz.answers[it.qid];
+      return v == null || (typeof v === 'string' && v.trim() === '');
+    });
+    if (unanswered.length && !quiz.forceSubmit && typeof window.confirm === 'function') {
+      var msg = '还有 ' + unanswered.length + ' 题没作答。\n\n' +
+        '・点「确定」= 就这样交卷（没作答的题不计入错题本）\n' +
+        '・点「取消」= 回去补完\n\n' +
+        '（想只练一部分也可以：直接交卷，做错的题照样会记进错题本）';
+      if (!window.confirm(msg)) return;
+    }
+    quiz.forceSubmit = true;
     quiz.submitted = true;
-    var items = allItems(), right = 0;
-    var wrongNow = [];
+
+    var items = allItems(), right = 0, wrongNow = [], skipped = 0;
     items.forEach(function (it) {
       var v = quiz.answers[it.qid];
       if (typeof v === 'string') { v = v.trim(); quiz.answers[it.qid] = v; }
       if (v === it.answer) right++;
-      else wrongNow.push(it);
+      else if (v == null || v === '') skipped++;   // 没作答：不算错题
+      else wrongNow.push(it);                        // 真答错了：记进错题本
     });
-    save(LS_LAST, { right: right, total: items.length, at: Date.now() });
-    recordResults(items);       // 更新错题本
+    save(LS_LAST, {
+      right: right, total: items.length, at: Date.now(),
+      skipped: skipped, answered: items.length - skipped
+    });
+    recordResults(items);       // 更新错题本（只记真答错的）
     quiz.wrongNow = wrongNow;
+    quiz.skipped = skipped;
     renderQuiz();
     refreshResume();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -796,14 +827,35 @@
   function mistakeKeys() { return Object.keys(getMistakes()); }
 
   /* 把一次提交的结果并入错题本：答错 → 记/累加；答对 → 移除（算是已经学会） */
+  /* 取某题「正确答案」的可读文字（记录时存下来，避免以后字母被重映射后对不上） */
+  function answerTextOf(it) {
+    if (it.choices) {
+      var hit = it.choices.filter(function (c) { return c.k === it.answer; })[0];
+      return hit ? (hit.k + '. ' + hit.t) : String(it.answer);
+    }
+    if (it.matchKey && it.word && it.srcAnswer != null) {
+      var ch = VA_PART_A.choices.filter(function (c) { return c.key === it.srcAnswer; })[0];
+      return ch ? (ch.key + '. ' + ch.text) : String(it.answer);
+    }
+    return String(it.answer);
+  }
+
+  /* 把一次提交的结果并入错题本。
+     只处理**真正作答了的**题：
+       答对 → 从错题本移除（视为已掌握）
+       答错 → 记入 / 累计 wrongCount
+       没作答 → 完全忽略（既不算错，也不会误清掉已有记录） */
   function recordResults(items) {
     var m = getMistakes(), now = new Date().toISOString();
     var added = 0, cleared = 0;
     items.forEach(function (it) {
       var key = it.matchKey;
       if (!key) return;
-      var ok = quiz.answers[it.qid] === it.answer;
-      if (ok) {
+      var v = quiz.answers[it.qid];
+      var answered = !(v == null || (typeof v === 'string' && v === ''));
+      if (!answered) return;                 // 跳过没作答的
+
+      if (v === it.answer) {
         if (m[key]) { delete m[key]; cleared++; }
       } else {
         if (m[key]) { m[key].wrongCount++; m[key].lastWrong = now; }
@@ -814,12 +866,15 @@
           };
           added++;
         }
-        // 记下这次错选了什么，便于回看
-        m[key].lastPick = quiz.answers[it.qid] || '';
+        m[key].lastPick = v;                 // 回看这次错选了什么
+        m[key].answerText = answerTextOf(it); // 记录时的正确答案文字
+        m[key].lastQuestion = it.text || it.word ||
+          (it.a ? (it.a + ' vs ' + it.b) : '');
       }
     });
     quiz.lastDelta = { added: added, cleared: cleared };
     saveMistakes(m);
+    return { added: added, cleared: cleared };
   }
 
   /* 供错题页展示：把 matchKey 还原成可读的题面 */
@@ -827,12 +882,16 @@
     var p = rec.part;
     if (p === 'A') {
       var w = VA_BY_WORD[rec.key];
+      // rec.answer 是**渲染时**重新映射过的字母，不能用原始 VA_PART_A.choices 去查
+      // （会拿到完全不相干的释义）。优先用记录时存下的文字，再退回按单词原文查。
+      var origA = VA_PART_A.items.filter(function (x) { return x.word === rec.key; })[0];
+      var origChoice = origA ? VA_PART_A.choices.filter(function (c) { return c.key === origA.answer; })[0] : null;
       return {
         kind: '词义连线', title: rec.key,
         sub: w ? (w.ipa ? '/' + w.ipa + '/ · ' + w.zh : w.zh) : '',
         prompt: '选出「' + rec.key + '」的释义',
-        answerText: VA_PART_A.choices.filter(function (c) { return c.key === rec.answer; })
-          .map(function (c) { return c.key + '. ' + c.text; })[0] || rec.answer,
+        answerText: rec.answerText ||
+          (origChoice ? (origChoice.key + '. ' + origChoice.text) : ('选项 ' + rec.answer)),
         reason: w ? w.def : ''
       };
     }
@@ -841,7 +900,8 @@
       return {
         kind: '同反义判断', title: parts[0] + '  vs  ' + parts[1],
         sub: '', prompt: '判断同义(S)还是反义(A)',
-        answerText: rec.answer === 'S' ? '同义 Synonyms' : '反义 Antonyms',
+        answerText: rec.answerText ||
+          (rec.answer === 'S' ? '同义 Synonyms' : '反义 Antonyms'),
         reason: (VA_PART_B.items.filter(function (x) { return x.a + '|' + x.b === rec.key; })[0] || {}).reason || ''
       };
     }
@@ -849,8 +909,8 @@
       var txt = String(rec.key).split('@@')[0];
       var c = VA_PART_C.items.filter(function (x) { return x.text === txt; })[0] || {};
       return {
-        kind: '选词填空', title: rec.answer, sub: '', prompt: txt,
-        answerText: rec.answer, reason: c.reason || ''
+        kind: '选词填空', title: rec.answer, sub: '', prompt: rec.lastQuestion || txt,
+        answerText: rec.answerText || rec.answer, reason: c.reason || ''
       };
     }
     if (p === 'D') {
@@ -860,11 +920,14 @@
       var ch = (d.choices || []).filter(function (x) { return x.k === rec.answer; })[0];
       return {
         kind: '近义辨析', title: rec.key, sub: '', prompt: d.word || rec.key,
-        answerText: ch ? (ch.k + '. ' + ch.t) : rec.answer,
+        answerText: rec.answerText || (ch ? (ch.k + '. ' + ch.t) : rec.answer),
         reason: d.reason || ''
       };
     }
-    return { kind: p || '?', title: rec.key, sub: '', prompt: '', answerText: rec.answer, reason: '' };
+    return {
+      kind: p || '?', title: rec.key, sub: '',
+      prompt: rec.lastQuestion || '', answerText: rec.answerText || rec.answer, reason: ''
+    };
   }
 
   function refreshMistakeUI() {

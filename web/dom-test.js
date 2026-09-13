@@ -179,7 +179,57 @@ const errors = [];
   is($('quizBody').querySelectorAll('.exp').length > 0, '每题都渲染了解析块');
   is($('quizBody').querySelectorAll('.exp.bad').length === 50 - score, '错题解析数 = 50 - 得分');
 
-  console.log('\n=== 5. 全对一题不错 → 错题本保持空 ===');
+  console.log('\n=== 5. 只做一小部分就交卷 → 未作答的不算错题 ===');
+  // 真实用户最容易踩的路径：做几题就提交。早期版本把 47 道「空题」也记成错题，
+  // 错题本瞬间被塞满 50 条，真正的错题反而被淹没 —— 看起来就像「错题本没用」。
+  win.confirm = () => true;                     // 模拟用户点「确定」
+  $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const sparseWord = $('quizBody').querySelector('.aword').textContent.trim();
+  answerWrongA(sparseWord);                     // 只故意答错这一题，其余全空着
+  $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const sp = JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}');
+  is(Object.keys(sp).length === 1,
+     '只答错 1 题 → 错题本只有 1 题（实际 ' + Object.keys(sp).length + '）');
+  is(Object.keys(sp)[0] === sparseWord, '记录的正是那一题: ' + Object.keys(sp)[0]);
+  is($('revBadge').textContent === '1', '角标是 1 而不是 50（实际 ' + $('revBadge').textContent + '）');
+  is($('quizBody').textContent.indexOf('未作答') >= 0, '结果页标明有题未作答');
+  is($('quizBody').textContent.indexOf('不计入错题本') >= 0, '结果页说明未作答不计入错题本');
+
+  console.log('\n=== 5b. 错题记录的「正确答案」必须与被考的词对应 ===');
+  // 曾经的 bug：Part A 选项字母在渲染时被重映射，错题本却拿原始选项表查文字，
+  // 于是显示成「pragmatic … 正确答案：O. 坚决的，意志坚定的」这种完全错位的结果。
+  let mismatch = 0;
+  Object.keys(sp).forEach((k) => {
+    const rec = sp[k];
+    if (rec.part !== 'A') return;
+    const w = win.VA_BY_WORD[k];
+    if (!w) return;
+    const shown = String(rec.answerText || '');
+    if (!shown) { mismatch++; console.log('     ✗ ' + k + ' 没存下正确答案文字'); return; }
+    const collides = win.VA_LEVEL1.find((o) =>
+      o.word !== k && o.zh && o.zh.length > 4 &&
+      shown.indexOf(o.zh) >= 0 && w.zh.indexOf(o.zh) < 0);
+    if (collides) {
+      mismatch++;
+      console.log('     ✗ ' + k + ' 的答案显示成了 ' + collides.word + ' 的释义: ' + shown);
+    }
+  });
+  is(mismatch === 0, 'Part A 错题记录的正确答案文字没有串到别的词');
+
+  console.log('\n=== 5c. 点「取消」应当什么都不记 ===');
+  $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const beforeCancel = win.localStorage.getItem('va.l1.mistakes');
+  answerWrongA($('quizBody').querySelector('.aword').textContent.trim());
+  win.confirm = () => false;                    // 模拟用户点「取消」
+  $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
+  is(win.localStorage.getItem('va.l1.mistakes') === beforeCancel, '点「取消」后错题本没有被改动');
+  is($('quizBody').querySelectorAll('.exp').length === 0, '点「取消」后没有进入批改状态');
+  is(!!$('btnSubmit'), '点「取消」后停留在答题状态，可以继续补完');
+  win.confirm = () => true;                     // 收尾：确认提交，推进状态
+  $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
+  is(!!$('btnAgain'), '确认提交后出现「再测一次」');
+
+  console.log('\n=== 6. 全对一题不错 → 错题本保持空 ===');
   $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
   fillCorrect();
   $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
@@ -189,7 +239,7 @@ const errors = [];
   is($('revBadge').classList.contains('hidden'), '导航错题角标隐藏');
   is($('btnRetest').style.display === 'none', '首屏「重测错题」按钮隐藏');
 
-  console.log('\n=== 6. 只答错一题 → 精确记录该题 ===');
+  console.log('\n=== 7. 只答错一题 → 精确记录该题 ===');
   $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
   const wrongWord = $('quizBody').querySelector('.arow .aword').textContent.trim();
   fillCorrect(wrongWord);                     // 其余 49 题全对
@@ -214,7 +264,7 @@ const errors = [];
   is($('btnRetest').style.display !== 'none', '「重测错题」按钮出现');
   is($('quizBody').textContent.indexOf('本次做错的题') >= 0, '成绩页列出本次错题');
 
-  console.log('\n=== 7. 同一题再错一次 → 次数累加 ===');
+  console.log('\n=== 8. 同一题再错一次 → 次数累加 ===');
   $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
   fillCorrect(wrongWord);
   answerWrongA(wrongWord);
@@ -223,7 +273,7 @@ const errors = [];
   is(Object.keys(mst).length === 1, '仍然只有 1 题（没有重复添加）');
   is(mst[wrongWord].wrongCount === 2, 'wrongCount 累加到 2（实际 ' + mst[wrongWord].wrongCount + '）');
 
-  console.log('\n=== 8. 重测：只出错题，答对后移出错题本 ===');
+  console.log('\n=== 9. 重测：只出错题，答对后移出错题本 ===');
   switchTo('quiz');
   $('btnRetest').dispatchEvent(new win.Event('click', { bubbles: true }));
   is($('quizBody').querySelectorAll('select').length === 1,
@@ -238,7 +288,7 @@ const errors = [];
   is(Object.keys(m4).length === 0, '答对后错题本清空（实际 ' + Object.keys(m4).length + ' 项）');
   is($('revBadge').classList.contains('hidden'), '角标重新隐藏');
 
-  console.log('\n=== 9. 错题报告导出 ===');
+  console.log('\n=== 10. 错题报告导出 ===');
   $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
   const selAll = $('quizBody').querySelectorAll('select');
   const w1 = selAll[0].closest('.arow').querySelector('.aword').textContent.trim();
@@ -260,7 +310,7 @@ const errors = [];
     is(report.indexOf(needle) >= 0, '报告含「' + needle + '」');
   });
 
-  console.log('\n=== 10. 清空错题本 ===');
+  console.log('\n=== 11. 清空错题本 ===');
   win.confirm = () => true;
   $('btnClear').dispatchEvent(new win.Event('click', { bubbles: true }));
   is(Object.keys(JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}')).length === 0,
@@ -268,7 +318,7 @@ const errors = [];
   is($('reviewList').querySelectorAll('.mist').length === 0, '错题列表清空');
   is($('reviewList').textContent.indexOf('错题本是空的') >= 0, '显示空状态');
 
-  console.log('\n=== 11. 单词卡 ===');
+  console.log('\n=== 12. 单词卡 ===');
   switchTo('cards');
   is(!$('tab-cards').classList.contains('hidden'), '切到单词卡 tab');
   const fcWord = $('fcWord').textContent;
@@ -282,7 +332,7 @@ const errors = [];
   $('fcKnow').dispatchEvent(new win.Event('click', { bubbles: true }));
   is($('fcKnown').textContent === '1', '「已掌握」计数变为 1（实际 ' + $('fcKnown').textContent + '）');
 
-  console.log('\n=== 12. 词汇表搜索 ===');
+  console.log('\n=== 13. 词汇表搜索 ===');
   switchTo('list');
   const search = $('wlSearch');
   search.value = 'adamant';
@@ -293,7 +343,7 @@ const errors = [];
   search.dispatchEvent(new win.Event('input', { bubbles: true }));
   is($('wl').textContent.indexOf('没有匹配') >= 0, '无结果时显示空状态提示');
 
-  console.log('\n=== 13. 运行期错误检查 ===');
+  console.log('\n=== 14. 运行期错误检查 ===');
   if (errors.length) { errors.forEach(bad); }
   else ok('运行期间没有 JS 错误');
 
