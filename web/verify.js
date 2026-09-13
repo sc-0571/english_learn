@@ -167,6 +167,33 @@ else ok('VA_LEVELS = 10 级');
 const avail = VA_LEVELS.filter(l => l.available).map(l => l.level);
 console.log(`     已实现: Level ${avail.join(', ')}；其余待补`);
 
+console.log('\n=== 9. 错题本用的 matchKey 必须唯一 ===');
+// 与 web/index.html 的 matchKeyOf 保持一致；重复会导致错题记录互相覆盖
+const mk = {
+  A: it => it.word,
+  B: it => it.a + '|' + it.b,
+  C: it => it.text + '@@' + it.answer,
+  D: it => it.lookup || it.word
+};
+const seen = {};
+let dupKey = 0;
+['A', 'B', 'C', 'D'].forEach(p => {
+  const src = p === 'A' ? VA_PART_A.items : p === 'B' ? VA_PART_B.items
+    : p === 'C' ? VA_PART_C.items : VA_PART_D.items;
+  src.forEach(it => {
+    const k = mk[p](it);
+    if (seen[k]) { dupKey++; bad(`matchKey 重复: "${k}"（${seen[k]} 与 ${p}）`); }
+    else seen[k] = p;
+  });
+  if (!src.every(it => mk[p](it))) bad(`Part ${p} 有项的 matchKey 为空`);
+});
+if (!dupKey) ok(`全部 ${Object.keys(seen).length} 个 matchKey 唯一，错题记录不会互相覆盖`);
+
+// Part A 的词必须都能在单词表里查到（错题页要显示释义）
+const missA = VA_PART_A.items.filter(it => !VA_BY_WORD[it.word]).map(it => it.word);
+if (missA.length) bad('Part A 有词不在单词表里: ' + missA.join(', '));
+else ok('Part A 所有词都能查到释义（错题页可正常展示）');
+
 console.log('\n' + '='.repeat(52));
 console.log(fail === 0 ? `通过，无错误。${warn ? '（' + warn + ' 条提醒）' : ''}` : `${fail} 项错误，${warn} 条提醒`);
 console.log('='.repeat(52) + '\n');

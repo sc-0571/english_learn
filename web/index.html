@@ -37,6 +37,26 @@
   }
   nav.tabs button:hover{color:var(--txt);border-color:#3c4457}
   nav.tabs button.on{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#0f1115;border-color:transparent;font-weight:650}
+  .navbadge{
+    display:inline-block;min-width:18px;padding:0 5px;margin-left:6px;border-radius:999px;
+    background:var(--bad);color:#1a0f11;font-size:11px;font-weight:750;line-height:17px;text-align:center;
+  }
+  nav.tabs button.on .navbadge{background:#0f1115;color:var(--bad)}
+
+  /* ---------- review (错题本) ---------- */
+  .mist{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--bad);
+        border-radius:var(--r);padding:14px 16px;margin-bottom:10px}
+  .mist.ok{border-left-color:var(--ok)}
+  .mist .top{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:7px}
+  .mist .key{font-weight:700;font-size:15.5px}
+  .mist .kind{font-size:11.5px;color:var(--dim2);background:var(--panel2);border:1px solid var(--line);
+              border-radius:6px;padding:1px 7px}
+  .mist .tally{font-size:12px;color:var(--bad);font-weight:650}
+  .mist .row{font-size:13.5px;margin:3px 0}
+  .mist .row b.bad{color:var(--bad)}
+  .mist .row b.good{color:var(--ok)}
+  .mist .src{font-size:12.5px;color:var(--dim);margin-top:7px;line-height:1.6}
+  .empty{padding:26px;text-align:center;color:var(--dim)}
 
   .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:14px}
   .card h2{margin:0 0 6px;font-size:17px}
@@ -174,6 +194,7 @@
 
   <nav class="tabs" id="tabs">
     <button data-tab="quiz" class="on">📝 测验</button>
+    <button data-tab="review">🔁 错题重学<span id="revBadge" class="navbadge hidden">0</span></button>
     <button data-tab="cards">🃏 单词卡</button>
     <button data-tab="list">📖 词汇表</button>
     <button data-tab="about">ℹ️ 说明</button>
@@ -185,7 +206,7 @@
       <h2>Level 1 自测</h2>
       <p class="muted">
         50 道题，四个部分：<b>词义连线</b>（20）· <b>同反义判断</b>（10）· <b>选词填空</b>（10）· <b>近义辨析</b>（10）。
-        题目和选项每次都会重新打乱。答完立刻能看到每题的答案与原书解析。
+        选项顺序每次都会重新打乱。答完立刻能看到每题的答案与原书解析。
       </p>
       <div class="breakdown">
         <span class="chip">题库：<b>50</b> 词</span>
@@ -194,11 +215,48 @@
       </div>
       <div class="btns">
         <button class="btn primary" id="btnStart">开始测验</button>
-        <button class="btn ghost" id="btnResume" style="display:none">继续上次</button>
+        <button class="btn ghost" id="btnRetest" style="display:none">🔁 重测错题</button>
       </div>
       <p class="dim2" id="lastScore" style="margin-top:12px"></p>
     </div>
     <div id="quizBody" class="hidden"></div>
+  </section>
+
+  <!-- ============ REVIEW (错题) ============ -->
+  <section id="tab-review" class="hidden">
+    <div class="card">
+      <h2>错题重学</h2>
+      <p class="muted">
+        每次提交测验后，答错的题会自动记在这里（存在你自己的浏览器里，不会上传）。
+        答对一次就会从错题本移除；答错的次数会累计，方便看出哪些词一直没记住。
+      </p>
+      <div class="breakdown">
+        <span class="chip">错题 <b id="revCount">0</b> 题</span>
+        <span class="chip">涉及单词 <b id="revWords">0</b> 个</span>
+        <span class="chip">累计练习 <b id="revAttempts">0</b> 次</span>
+      </div>
+      <div class="btns">
+        <button class="btn primary" id="btnRetest2">🔁 重测这 N 题</button>
+        <button class="btn ghost" id="btnExport">📋 生成错题报告</button>
+        <button class="btn ghost" id="btnClear">🗑 清空错题本</button>
+      </div>
+      <div id="reportBox" class="hidden" style="margin-top:14px">
+        <p class="dim2" style="margin:0 0 8px">
+          报告已生成。可以<b>自己存一份</b>，或者把它贴给 AI 助手让它针对这些词给你讲辨析 / 出练习。
+          <b>注意：这段内容不会自动发给任何人。</b>
+        </p>
+        <textarea id="reportText" readonly spellcheck="false"
+          style="width:100%;height:210px;background:#12151b;color:var(--txt);border:1px solid var(--line);
+                 border-radius:10px;padding:11px;font-family:ui-monospace,Consolas,monospace;font-size:12.5px;
+                 line-height:1.6;resize:vertical"></textarea>
+        <div class="btns" style="margin-top:9px">
+          <button class="btn" id="btnCopyReport">复制到剪贴板</button>
+          <button class="btn ghost" id="btnDlReport">下载为 .txt</button>
+        </div>
+        <p class="dim2" id="copyHint" style="margin-top:8px"></p>
+      </div>
+    </div>
+    <div id="reviewList"></div>
   </section>
 
   <!-- ============ FLASHCARDS ============ -->
@@ -251,7 +309,17 @@
       </p>
       <p class="muted" style="margin-top:12px">
         <b>纯静态、无后端：</b>打开 <code>index.html</code> 即可用，无需服务器、无需联网。
-        进度与成绩存在浏览器 localStorage，不会上传到任何地方。
+        进度、错题本与成绩都存在浏览器 localStorage，<b>不会上传到任何地方</b>。
+      </p>
+      <p class="muted" style="margin-top:12px">
+        <b>错题是怎么记的：</b>每次提交后，答错的题自动进入「错题重学」；
+        答对一次就移出；同一题反复答错会累计次数，方便看出哪些词一直没记住。
+        「重测」只会出这些错题，并且 Part A 的选项字母会重新映射，所以不会靠记字母蒙对。
+      </p>
+      <p class="muted" style="margin-top:12px">
+        <b>我怎么看不到你的作答：</b>这个页面没有服务器，你的答案从未离开浏览器。
+        如果想让我（AI）针对你的错题讲解，请到「错题重学」点
+        <b>生成错题报告</b>，再把那段文字贴给我。
       </p>
       <p class="muted" style="margin-top:12px">
         <b>关于选项乱序：</b>每次开始测验，选项顺序都会重新打乱，方便反复练。
@@ -279,6 +347,7 @@
 
   var LS_KNOWN = 'va.l1.known';
   var LS_LAST = 'va.l1.last';
+  var LS_MIST = 'va.l1.mistakes';
   var L1 = VA_LEVEL1.slice();
 
   /* ---------------- utils ---------------- */
@@ -307,79 +376,132 @@
   function $(id) { return document.getElementById(id); }
 
   /* ---------------- tabs ---------------- */
+  var TAB_IDS = ['quiz', 'review', 'cards', 'list', 'about'];
   var tabs = document.querySelectorAll('#tabs button');
   Array.prototype.forEach.call(tabs, function (b) {
-    b.addEventListener('click', function () {
-      Array.prototype.forEach.call(tabs, function (x) { x.classList.remove('on'); });
-      b.classList.add('on');
-      ['quiz', 'cards', 'list', 'about'].forEach(function (t) {
-        $('tab-' + t).classList.toggle('hidden', t !== b.dataset.tab);
-      });
-      if (b.dataset.tab === 'cards') renderCard();
-    });
+    b.addEventListener('click', function () { switchTab(b.dataset.tab); });
   });
 
   /* ---------------- quiz state ---------------- */
   // answers: { <qid>: <selectedKey> }
   var quiz = null;
 
-  function buildQuiz() {
+  /* 每道题的稳定标识（跨次测验不变），用于错题本与重测。
+     A → 单词；B → 词对；C → 句子（答案也一起，保证唯一）；D → 单词 */
+  function matchKeyOf(partId, it) {
+    if (partId === 'A') return it.word;
+    if (partId === 'B') return it.a + '|' + it.b;
+    if (partId === 'C') return it.text + '@@' + it.answer;
+    if (partId === 'D') return it.lookup || it.word;
+    return it.qid;
+  }
+
+  /* 构建一套测验。
+     onlyKeys 为空 → 完整 50 题；否则只出这些 matchKey 对应的题（错题重测）。 */
+  function buildQuiz(onlyKeys) {
+    var filt = onlyKeys && onlyKeys.length ? onlyKeys : null;
+    var inSet = function (k) { return !filt || filt.indexOf(k) >= 0; };
     var parts = [];
 
-    /* Part A */
-    var aItems = shuffle(VA_PART_A.items);
-    var aChoices = shuffle(VA_PART_A.choices);
-    parts.push({
-      id: 'A', title: VA_PART_A.title, instruction: VA_PART_A.instruction,
-      type: 'match', choices: aChoices,
-      items: aItems.map(function (it, i) {
-        return { qid: 'A' + i, word: it.word, answer: it.answer };
-      })
-    });
+    /* Part A —— 词义连线。重测时只保留错过的词，并从完整选项表里重建字母映射 */
+    var allAKeys = {};
+    VA_PART_A.choices.forEach(function (c) { allAKeys[c.key] = c.text; });
+    var aSrc = VA_PART_A.items.filter(function (it) { return inSet(it.word); });
+    if (aSrc.length) {
+      // 重新分配选项字母：把用到的释义按原字母顺序抽出来，再打乱
+      var usedKeys = {};
+      aSrc.forEach(function (it) { usedKeys[it.answer] = 1; });
+      var subChoices = Object.keys(usedKeys).sort().map(function (k) {
+        return { key: k, text: allAKeys[k] };
+      });
+      var shuffled = shuffle(subChoices);
+      // 旧字母 → 新字母
+      var remap = {};
+      shuffled.forEach(function (c, i) {
+        remap[c.key] = String.fromCharCode(65 + i); // A, B, C…
+      });
+      var finalChoices = shuffled.map(function (c) {
+        return { key: remap[c.key], text: c.text };
+      });
+      parts.push({
+        id: 'A', title: VA_PART_A.title, instruction: VA_PART_A.instruction,
+        type: 'match', choices: finalChoices,
+        items: shuffle(aSrc).map(function (it, i) {
+          return {
+            qid: 'A' + i, matchKey: it.word, word: it.word,
+            answer: remap[it.answer], srcAnswer: it.answer
+          };
+        })
+      });
+    }
 
-    /* Part B — 题目顺序保持原书顺序（打乱选项即可，题目次序本就有难度递进） */
-    parts.push({
-      id: 'B', title: VA_PART_B.title, instruction: VA_PART_B.instruction,
-      type: 'choice',
-      items: VA_PART_B.items.map(function (it, i) {
-        return {
-          qid: 'B' + i, a: it.a, b: it.b, answer: it.answer, reason: it.reason,
-          choices: VA_PART_B.options
-        };
-      })
-    });
+    /* Part B —— 题目顺序保持原书顺序（打乱选项即可，题目次序本就有难度递进） */
+    var bSrc = VA_PART_B.items.filter(function (it) { return inSet(matchKeyOf('B', it)); });
+    if (bSrc.length) {
+      parts.push({
+        id: 'B', title: VA_PART_B.title, instruction: VA_PART_B.instruction,
+        type: 'choice',
+        items: bSrc.map(function (it, i) {
+          return {
+            qid: 'B' + i, matchKey: matchKeyOf('B', it), a: it.a, b: it.b,
+            answer: it.answer, reason: it.reason,
+            choices: VA_PART_B.options
+          };
+        })
+      });
+    }
 
-    /* Part C */
-    parts.push({
-      id: 'C', title: VA_PART_C.title, instruction: VA_PART_C.instruction,
-      type: 'bank', bank: shuffle(VA_PART_C.bank),
-      items: VA_PART_C.items.map(function (it, i) {
-        return {
-          qid: 'C' + i, text: it.text, answer: it.answer,
-          hint: it.hint, reason: it.reason
-        };
-      })
-    });
+    /* Part C —— 选词填空。重测时词库收窄到本题答案涉及的那几个词 */
+    var cSrc = VA_PART_C.items.filter(function (it) { return inSet(matchKeyOf('C', it)); });
+    if (cSrc.length) {
+      var bank = VA_PART_C.bank.filter(function (w) {
+        return cSrc.some(function (it) { return it.answer === w; });
+      });
+      parts.push({
+        id: 'C', title: VA_PART_C.title, instruction: VA_PART_C.instruction,
+        type: 'bank', bank: shuffle(bank),
+        items: cSrc.map(function (it, i) {
+          return {
+            qid: 'C' + i, matchKey: matchKeyOf('C', it), text: it.text,
+            answer: it.answer, hint: it.hint, reason: it.reason
+          };
+        })
+      });
+    }
 
-    /* Part D — 题目顺序同样保持原书顺序，只打乱每个词的四个选项 */
-    parts.push({
-      id: 'D', title: VA_PART_D.title, instruction: VA_PART_D.instruction,
-      type: 'choice',
-      items: VA_PART_D.items.map(function (it, i) {
-        return {
-          qid: 'D' + i, word: it.word, answer: it.answer, reason: it.reason,
-          bonus: !!it.bonus, choices: shuffle(it.choices)
-        };
-      })
-    });
+    /* Part D —— 题目顺序同样保持原书顺序，只打乱每个词的四个选项 */
+    var dSrc = VA_PART_D.items.filter(function (it) { return inSet(matchKeyOf('D', it)); });
+    if (dSrc.length) {
+      parts.push({
+        id: 'D', title: VA_PART_D.title, instruction: VA_PART_D.instruction,
+        type: 'choice',
+        items: dSrc.map(function (it, i) {
+          return {
+            qid: 'D' + i, matchKey: matchKeyOf('D', it), word: it.word,
+            lookup: it.lookup, answer: it.answer, reason: it.reason,
+            bonus: !!it.bonus, choices: shuffle(it.choices)
+          };
+        })
+      });
+    }
 
-    return { parts: parts, answers: {}, submitted: false };
+    return { parts: parts, answers: {}, submitted: false, retest: !!filt };
   }
 
   function allItems() {
     var out = [];
     quiz.parts.forEach(function (p) { p.items.forEach(function (it) { out.push(it); }); });
     return out;
+  }
+
+  function partIdOf(qid) {
+    for (var i = 0; i < quiz.parts.length; i++) {
+      var p = quiz.parts[i];
+      for (var j = 0; j < p.items.length; j++) {
+        if (p.items[j].qid === qid) return p.id;
+      }
+    }
+    return '?';
   }
 
   function answeredCount() {
@@ -551,17 +673,52 @@
       '<div class="breakdown">';
     ['A', 'B', 'C', 'D'].forEach(function (k) {
       var b = byPart[k];
+      if (!b) return;   // 重测时可能缺某个 Part
       h += '<span class="chip">' + esc(b.title) + ' <b>' + b.r + '</b>/' + b.t + '</span>';
     });
-    h += '</div></div></div></div>';
+    h += '</div>';
+
+    // 本次新增/清除的错题提示
+    var delta = quiz.lastDelta || { added: 0, cleared: 0 };
+    var left = mistakeKeys().length;
+    h += '<p class="dim2" style="margin-top:10px">';
+    if (delta.added) h += '本次新增错题 <b style="color:var(--bad)">' + delta.added + '</b> 题；';
+    if (delta.cleared) h += '答对并清出错题本 <b style="color:var(--ok)">' + delta.cleared + '</b> 题；';
+    h += '错题本现有 <b>' + left + '</b> 题。';
+    h += '</p>';
+
+    // 本次做错的题（重测时不再重复列出）
+    if (!quiz.retest && quiz.wrongNow && quiz.wrongNow.length) {
+      h += '<div style="margin-top:12px"><p class="muted" style="margin:0 0 6px">本次做错的题：</p>' +
+        '<div class="breakdown">';
+      quiz.wrongNow.forEach(function (it) {
+        var label = it.word || (it.a ? (it.a + ' / ' + it.b) : '') ||
+          (it.text ? String(it.text).replace('______', '___') : it.answer);
+        h += '<span class="chip">' + esc(String(label).replace(/（加分题）/, '')) + '</span>';
+      });
+      h += '</div></div>';
+    }
+    h += '<div class="btns" style="margin-top:12px">' +
+      '<button class="btn" id="btnGoReview">🔁 查看错题本' +
+      (left ? '（' + left + '）' : '') + '</button>' +
+      (left ? '<button class="btn ghost" id="btnRetestNow">🎯 只重测错题</button>' : '') +
+      '</div>';
+
+    h += '</div></div>';
     return h;
   }
 
-  /* ---------------- quiz events ---------------- */
+  /* ---------------- quiz events ----------------
+     注意：这些监听器只绑一次，绑在长期存在的 #quizBody 上（内容用 innerHTML 换）。
+     早期版本在每次 renderQuiz() 里都调用本函数，导致监听器不断累积 ——
+     一次点击会触发 N 次 submitQuiz()，把错题次数重复累加。 */
   function bindQuizEvents() {
     var body = $('quizBody');
+    if (body.dataset.bound === '1') return;
+    body.dataset.bound = '1';
 
     body.addEventListener('change', function (e) {
+      if (!quiz || quiz.submitted) return;
       var t = e.target;
       if (t.dataset && t.dataset.qid) {
         quiz.answers[t.dataset.qid] = t.value;
@@ -569,6 +726,7 @@
       }
     });
     body.addEventListener('input', function (e) {
+      if (!quiz || quiz.submitted) return;
       var t = e.target;
       if (t.tagName === 'INPUT' && t.type === 'text' && t.dataset && t.dataset.qid) {
         quiz.answers[t.dataset.qid] = t.value;
@@ -579,9 +737,21 @@
       var id = e.target && e.target.id;
       if (id === 'btnSubmit') submitQuiz();
       else if (id === 'btnAgain') { startQuiz(); }
+      else if (id === 'btnRetestNow') { startQuiz(mistakeKeys()); }
+      else if (id === 'btnGoReview') { switchTab('review'); }
       else if (id === 'btnAbandon') { quiz = null; $('quizBody').classList.add('hidden'); $('quizIntro').classList.remove('hidden'); refreshResume(); }
       else if (id === 'btnTop') window.scrollTo({ top: 0, behavior: 'smooth' });
     });
+  }
+
+  function switchTab(name) {
+    Array.prototype.forEach.call(tabs, function (x) {
+      x.classList.toggle('on', x.dataset.tab === name);
+    });
+    TAB_IDS.forEach(function (t) { $('tab-' + t).classList.toggle('hidden', t !== name); });
+    if (name === 'cards') renderCard();
+    if (name === 'review') renderReview();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function updateProgress() {
@@ -596,35 +766,194 @@
   function submitQuiz() {
     quiz.submitted = true;
     var items = allItems(), right = 0;
+    var wrongNow = [];
     items.forEach(function (it) {
       var v = quiz.answers[it.qid];
       if (typeof v === 'string') { v = v.trim(); quiz.answers[it.qid] = v; }
       if (v === it.answer) right++;
+      else wrongNow.push(it);
     });
     save(LS_LAST, { right: right, total: items.length, at: Date.now() });
+    recordResults(items);       // 更新错题本
+    quiz.wrongNow = wrongNow;
+    renderQuiz();
+    refreshResume();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function startQuiz(onlyKeys) {
+    quiz = buildQuiz(onlyKeys);
     renderQuiz();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function startQuiz() {
-    quiz = buildQuiz();
-    renderQuiz();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  /* ---------------- 错题本 ---------------- */
+  function getMistakes() {
+    var m = load(LS_MIST, {});
+    return (m && typeof m === 'object') ? m : {};
+  }
+  function saveMistakes(m) { save(LS_MIST, m); refreshMistakeUI(); }
+  function mistakeKeys() { return Object.keys(getMistakes()); }
+
+  /* 把一次提交的结果并入错题本：答错 → 记/累加；答对 → 移除（算是已经学会） */
+  function recordResults(items) {
+    var m = getMistakes(), now = new Date().toISOString();
+    var added = 0, cleared = 0;
+    items.forEach(function (it) {
+      var key = it.matchKey;
+      if (!key) return;
+      var ok = quiz.answers[it.qid] === it.answer;
+      if (ok) {
+        if (m[key]) { delete m[key]; cleared++; }
+      } else {
+        if (m[key]) { m[key].wrongCount++; m[key].lastWrong = now; }
+        else {
+          m[key] = {
+            part: partIdOf(it.qid), key: key, answer: it.answer,
+            wrongCount: 1, firstWrong: now, lastWrong: now
+          };
+          added++;
+        }
+        // 记下这次错选了什么，便于回看
+        m[key].lastPick = quiz.answers[it.qid] || '';
+      }
+    });
+    quiz.lastDelta = { added: added, cleared: cleared };
+    saveMistakes(m);
   }
 
+  /* 供错题页展示：把 matchKey 还原成可读的题面 */
+  function describeMistake(rec) {
+    var p = rec.part;
+    if (p === 'A') {
+      var w = VA_BY_WORD[rec.key];
+      return {
+        kind: '词义连线', title: rec.key,
+        sub: w ? (w.ipa ? '/' + w.ipa + '/ · ' + w.zh : w.zh) : '',
+        prompt: '选出「' + rec.key + '」的释义',
+        answerText: VA_PART_A.choices.filter(function (c) { return c.key === rec.answer; })
+          .map(function (c) { return c.key + '. ' + c.text; })[0] || rec.answer,
+        reason: w ? w.def : ''
+      };
+    }
+    if (p === 'B') {
+      var parts = rec.key.split('|');
+      return {
+        kind: '同反义判断', title: parts[0] + '  vs  ' + parts[1],
+        sub: '', prompt: '判断同义(S)还是反义(A)',
+        answerText: rec.answer === 'S' ? '同义 Synonyms' : '反义 Antonyms',
+        reason: (VA_PART_B.items.filter(function (x) { return x.a + '|' + x.b === rec.key; })[0] || {}).reason || ''
+      };
+    }
+    if (p === 'C') {
+      var txt = String(rec.key).split('@@')[0];
+      var c = VA_PART_C.items.filter(function (x) { return x.text === txt; })[0] || {};
+      return {
+        kind: '选词填空', title: rec.answer, sub: '', prompt: txt,
+        answerText: rec.answer, reason: c.reason || ''
+      };
+    }
+    if (p === 'D') {
+      var d = VA_PART_D.items.filter(function (x) {
+        return (x.lookup || x.word) === rec.key;
+      })[0] || {};
+      var ch = (d.choices || []).filter(function (x) { return x.k === rec.answer; })[0];
+      return {
+        kind: '近义辨析', title: rec.key, sub: '', prompt: d.word || rec.key,
+        answerText: ch ? (ch.k + '. ' + ch.t) : rec.answer,
+        reason: d.reason || ''
+      };
+    }
+    return { kind: p || '?', title: rec.key, sub: '', prompt: '', answerText: rec.answer, reason: '' };
+  }
+
+  function refreshMistakeUI() {
+    var keys = mistakeKeys();
+    var badge = $('revBadge');
+    if (badge) {
+      badge.textContent = keys.length;
+      badge.classList.toggle('hidden', keys.length === 0);
+    }
+    var btn = $('btnRetest');
+    if (btn) {
+      btn.style.display = keys.length ? '' : 'none';
+      btn.textContent = '🔁 重测错题（' + keys.length + '）';
+    }
+    var b2 = $('btnRetest2');
+    if (b2) b2.textContent = '🔁 重测这 ' + keys.length + ' 题';
+  }
+
+  function renderReview() {
+    var m = getMistakes();
+    var keys = Object.keys(m);
+    // 按「错得最多」优先，其次最近错的
+    keys.sort(function (a, b) {
+      return (m[b].wrongCount - m[a].wrongCount) ||
+        String(m[b].lastWrong).localeCompare(String(m[a].lastWrong));
+    });
+    var words = {}, attempts = 0;
+    keys.forEach(function (k) { attempts += m[k].wrongCount; });
+    $('revCount').textContent = keys.length;
+    $('revAttempts').textContent = attempts;
+    refreshMistakeUI();
+
+    var host = $('reviewList');
+    if (!keys.length) {
+      host.innerHTML = '<div class="card empty">错题本是空的 🎉<br>' +
+        '<span class="dim2">去做一次测验吧，答错的题会自动记到这里。</span></div>';
+      $('revWords').textContent = '0';
+      return;
+    }
+    var html = '';
+    keys.forEach(function (k) {
+      var rec = m[k];
+      var d = describeMistake(rec);
+      if (d.title) words[d.title.split(' ')[0]] = 1;
+      html += '<div class="mist"><div class="top">' +
+        '<span class="key">' + esc(d.title) + '</span>' +
+        '<span class="kind">' + esc(d.kind) + '</span>' +
+        (rec.wrongCount > 1 ? '<span class="tally">错了 ' + rec.wrongCount + ' 次</span>' : '') +
+        '</div>';
+      if (d.sub) html += '<div class="row dim2">' + esc(d.sub) + '</div>';
+      html += '<div class="row">' + esc(d.prompt) + '</div>';
+      if (rec.lastPick) {
+        html += '<div class="row">你选了：<b class="bad">' + esc(rec.lastPick) + '</b>' +
+          ' · 正确答案：<b class="good">' + esc(d.answerText) + '</b></div>';
+      } else {
+        html += '<div class="row">正确答案：<b class="good">' + esc(d.answerText) + '</b></div>';
+      }
+      if (d.reason) html += '<div class="src">' + esc(d.reason) + '</div>';
+      html += '</div>';
+    });
+    host.innerHTML = html;
+    // 统计涉及多少个不同的词
+    var uniq = {};
+    keys.forEach(function (k) {
+      var d = describeMistake(m[k]);
+      uniq[d.title] = 1;
+    });
+    $('revWords').textContent = Object.keys(uniq).length;
+  }
+
+  /* 更新首屏的「上次成绩」提示，并同步错题按钮状态 */
   function refreshResume() {
     var last = load(LS_LAST, null);
-    var el = $('lastScore'), btn = $('btnResume');
+    var el = $('lastScore');
+    var keys = mistakeKeys();
     if (last) {
       var d = new Date(last.at);
-      el.textContent = '上次成绩：' + last.right + ' / ' + last.total +
+      var line = '上次成绩：' + last.right + ' / ' + last.total +
         '（' + Math.round(last.right / last.total * 100) + '%） · ' +
         d.toLocaleString('zh-CN');
-    } else { el.textContent = ''; }
-    btn.style.display = 'none';
+      if (keys.length) line += '　|　错题本还有 ' + keys.length + ' 题待重测';
+      el.textContent = line;
+    } else {
+      el.textContent = '';
+    }
+    refreshMistakeUI();
   }
 
-  $('btnStart').addEventListener('click', startQuiz);
+  $('btnStart').addEventListener('click', function () { startQuiz(); });
 
   /* ---------------- flashcards ---------------- */
   var fcState = { order: [], idx: 0, known: load(LS_KNOWN, {}) };
@@ -696,11 +1025,100 @@
   }
   $('wlSearch').addEventListener('input', function () { renderList(this.value); });
 
+  /* ---------------- 错题报告导出 ---------------- */
+  function buildReport() {
+    var m = getMistakes();
+    var keys = Object.keys(m);
+    if (!keys.length) return '（错题本是空的）';
+    keys.sort(function (a, b) {
+      return (m[b].wrongCount - m[a].wrongCount) ||
+        String(m[b].lastWrong).localeCompare(String(m[a].lastWrong));
+    });
+    var last = load(LS_LAST, null);
+    var L = [];
+    L.push('Verbal Advantage — Level 1 错题报告');
+    L.push('生成时间: ' + new Date().toLocaleString('zh-CN'));
+    L.push('题库来源: ' + VA_SOURCE);
+    if (last) L.push('最近一次成绩: ' + last.right + '/' + last.total +
+      '（' + Math.round(last.right / last.total * 100) + '%）');
+    L.push('错题数: ' + keys.length);
+    L.push('');
+    L.push('请针对下面这些词，帮我讲清辨析并出练习题。');
+    L.push('----------------------------------------------------------');
+    keys.forEach(function (k, i) {
+      var rec = m[k], d = describeMistake(rec);
+      L.push('');
+      L.push('[' + (i + 1) + '] ' + d.title + '   （' + d.kind + '，错 ' + rec.wrongCount + ' 次）');
+      if (d.sub) L.push('    释义: ' + d.sub);
+      L.push('    题目: ' + d.prompt);
+      if (rec.lastPick) L.push('    我选了: ' + rec.lastPick + '  ← 错的');
+      L.push('    正确答案: ' + d.answerText);
+      if (d.reason) L.push('    原书解析: ' + d.reason);
+    });
+    L.push('');
+    L.push('----------------------------------------------------------');
+    L.push('（此报告由本地网页生成，只存在于我的浏览器里）');
+    return L.join('\n');
+  }
+
+  function showReport() {
+    var txt = buildReport();
+    $('reportText').value = txt;
+    $('reportBox').classList.remove('hidden');
+    $('copyHint').textContent = '';
+    $('reportBox').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  $('btnExport').addEventListener('click', showReport);
+
+  $('btnCopyReport').addEventListener('click', function () {
+    var ta = $('reportText');
+    ta.removeAttribute('readonly');
+    ta.select();
+    ta.setSelectionRange(0, ta.value.length);
+    var done = false;
+    try { done = document.execCommand('copy'); } catch (e) { done = false; }
+    ta.setAttribute('readonly', 'readonly');
+    $('copyHint').textContent = done
+      ? '✓ 已复制。粘贴给 AI 助手或存进笔记即可。'
+      : '浏览器不允许自动复制 —— 请手动全选（Ctrl+A）后按 Ctrl+C。';
+  });
+
+  $('btnDlReport').addEventListener('click', function () {
+    var txt = $('reportText').value || buildReport();
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain;charset=utf-8' }));
+    a.download = 'va-level1-mistakes.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+  });
+
+  $('btnClear').addEventListener('click', function () {
+    if (!mistakeKeys().length) { alert('错题本已经是空的。'); return; }
+    if (!confirm('确定清空错题本？此操作不可恢复。')) return;
+    saveMistakes({});
+    $('reportBox').classList.add('hidden');
+    renderReview();
+  });
+
+  $('btnRetest2').addEventListener('click', function () {
+    if (!mistakeKeys().length) { alert('错题本是空的，先做一次测验吧。'); return; }
+    switchTab('quiz');
+    startQuiz(mistakeKeys());
+  });
+  $('btnRetest').addEventListener('click', function () {
+    if (!mistakeKeys().length) return;
+    startQuiz(mistakeKeys());
+  });
+
   /* ---------------- init ---------------- */
   $('srcName').textContent = VA_SOURCE;
   $('fcTotal').textContent = L1.length;
   renderList('');
   refreshResume();
+  refreshMistakeUI();
 })();
 </script>
 </body>
