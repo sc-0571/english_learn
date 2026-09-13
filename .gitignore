@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node（仅用于本地跑 jsdom 冒烟测试，不需要提交）
+node_modules/
+package-lock.json
+npm-debug.log*

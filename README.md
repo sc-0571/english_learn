@@ -33,3 +33,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-alias.ps1
 
 这会写入全局 git 别名 `alias.backup`，之后 `git backup` 即可用。
 需要该机器上的 SSH key 已加入 GitHub 账号 `sc-0571`。
+
+## 内容
+
+| 路径 | 说明 |
+|---|---|
+| `index.html` | 网页入口（跳转到 `web/index.html`） |
+| `web/` | **Verbal Advantage 词汇自测网页**（纯静态，详见 `web/README.md`） |
+| `level1-quiz.md` | Level 1 的 50 道题（Markdown 版，含答案解析） |
+| `backup.ps1` | 备份脚本 |
+| `scripts/install-alias.ps1` | 安装 `git backup` 别名 |
+
+网页部分完全离线可用：直接双击 `index.html` 即可，不需要服务器或联网。
+要发布到 GitHub Pages：**Settings → Pages → Deploy from a branch → `main` / `(root)`**。

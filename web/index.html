@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verbal Advantage — 词汇自测</title>
+<meta name="description" content="Verbal Advantage Level 1 词汇自测：连线、同反义、选词填空、近义辨析。">
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2b3140;
+    --txt:#e8eaf0; --dim:#9aa3b2; --dim2:#6b7382;
+    --acc:#6ea8fe; --acc2:#8b7cf6;
+    --ok:#3ecf8e; --okbg:#12301f; --bad:#f87171; --badbg:#331a1c;
+    --warn:#f5c451;
+    --r:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    line-height:1.65; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:860px;margin:0 auto;padding:20px 16px 96px}
+
+  /* ---------- header ---------- */
+  header.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+  .brand{font-size:19px;font-weight:700;letter-spacing:.2px}
+  .brand span{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .badge{font-size:11px;padding:3px 9px;border:1px solid var(--line);border-radius:999px;color:var(--dim)}
+
+  nav.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+  nav.tabs button{
+    background:var(--panel);color:var(--dim);border:1px solid var(--line);
+    padding:8px 15px;border-radius:999px;font-size:14px;cursor:pointer;font-family:inherit;
+    transition:.15s;
+  }
+  nav.tabs button:hover{color:var(--txt);border-color:#3c4457}
+  nav.tabs button.on{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#0f1115;border-color:transparent;font-weight:650}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:14px}
+  .card h2{margin:0 0 6px;font-size:17px}
+  .muted{color:var(--dim);font-size:13.5px}
+  .dim2{color:var(--dim2);font-size:12.5px}
+
+  /* ---------- progress ---------- */
+  .prog{position:sticky;top:0;z-index:20;background:rgba(15,17,21,.93);backdrop-filter:blur(8px);padding:10px 0;margin:-4px 0 14px;border-bottom:1px solid var(--line)}
+  .prog .row{display:flex;justify-content:space-between;font-size:13px;color:var(--dim);margin-bottom:6px}
+  .bar{height:7px;background:var(--panel2);border-radius:999px;overflow:hidden}
+  .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .25s}
+
+  /* ---------- part A dropdown rows ---------- */
+  .arow{display:grid;grid-template-columns:118px 1fr;gap:10px;align-items:center;padding:9px 0;border-bottom:1px dashed var(--line)}
+  .arow:last-child{border-bottom:0}
+  .aword{font-weight:640;font-size:15px}
+  .arow .meta{font-size:11.5px;color:var(--dim2);font-weight:400}
+  select,input[type=text]{
+    width:100%;background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+    border-radius:9px;padding:9px 11px;font-size:14px;font-family:inherit;
+  }
+  select:focus{outline:2px solid var(--acc);outline-offset:1px}
+  select.good{border-color:var(--ok);background:var(--okbg)}
+  select.bad{border-color:var(--bad);background:var(--badbg)}
+
+  /* ---------- generic question ---------- */
+  .q{padding:14px 0;border-bottom:1px dashed var(--line)}
+  .q:last-child{border-bottom:0}
+  .qhead{display:flex;gap:9px;align-items:baseline;margin-bottom:9px}
+  .qn{flex:0 0 auto;font-size:12px;color:var(--dim2);font-variant-numeric:tabular-nums;min-width:22px}
+  .qtext{font-size:15.5px}
+  .qtext b{color:var(--acc)}
+  .pair{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:15.5px}
+  .pair .w{font-weight:600}
+  .pair .vs{color:var(--dim2);font-size:12px}
+  label.opt{
+    display:flex;gap:9px;align-items:flex-start;padding:9px 11px;margin:5px 0;
+    background:var(--panel2);border:1px solid var(--line);border-radius:9px;cursor:pointer;font-size:14.5px;
+    transition:.13s;
+  }
+  label.opt:hover{border-color:#3c4457}
+  label.opt input{accent-color:var(--acc);margin:4px 0 0;flex:0 0 auto}
+  label.opt.good{border-color:var(--ok);background:var(--okbg)}
+  label.opt.bad{border-color:var(--bad);background:var(--badbg)}
+  label.opt .zh{color:var(--txt)}
+
+  .bank{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0 4px}
+  .bank span{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:4px 11px;font-size:13.5px;font-weight:600}
+
+  .exp{margin-top:9px;padding:10px 12px;border-left:3px solid var(--ok);background:#101b16;border-radius:0 9px 9px 0;font-size:13.5px;color:#c9d4cf}
+  .exp.bad{border-left-color:var(--bad);background:#1c1315;color:#e0cdcd}
+  .exp .tag{font-weight:700}
+  .exp .tag.ok{color:var(--ok)} .exp .tag.no{color:var(--bad)}
+  .explain-src{display:block;margin-top:4px;color:var(--dim2);font-size:12.5px}
+
+  /* ---------- buttons ---------- */
+  .btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+  button.btn{
+    font-family:inherit;font-size:14.5px;font-weight:600;cursor:pointer;
+    padding:11px 20px;border-radius:10px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--txt);transition:.15s;
+  }
+  button.btn:hover{border-color:#3c4457}
+  button.btn.primary{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#0f1115;border-color:transparent}
+  button.btn.primary:hover{filter:brightness(1.08)}
+  button.btn.ghost{background:transparent}
+  button.btn:disabled{opacity:.45;cursor:default;filter:none}
+
+  /* ---------- result ---------- */
+  .score{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+  .ring{
+    --p:0;
+    width:118px;height:118px;border-radius:50%;flex:0 0 auto;
+    background:conic-gradient(var(--acc) calc(var(--p)*1%), var(--panel2) 0);
+    display:grid;place-items:center;position:relative;
+  }
+  .ring::after{content:'';position:absolute;inset:9px;border-radius:50%;background:var(--panel)}
+  .ring div{position:relative;text-align:center;line-height:1.15}
+  .ring .n{font-size:29px;font-weight:750}
+  .ring .d{font-size:11px;color:var(--dim)}
+  .verdict{font-size:15.5px;font-weight:600}
+  .breakdown{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:5px 11px;font-size:13px}
+  .chip b{color:var(--acc)}
+
+  /* ---------- flashcards ---------- */
+  .fc-stage{perspective:1200px;margin:18px 0}
+  .fc{
+    position:relative;min-height:250px;cursor:pointer;
+    transform-style:preserve-3d;transition:transform .5s cubic-bezier(.4,.2,.2,1);
+  }
+  .fc.flip{transform:rotateY(180deg)}
+  .fc .face{
+    position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+    padding:26px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;
+  }
+  .fc .back{transform:rotateY(180deg);align-items:stretch;text-align:left;justify-content:flex-start;overflow:auto}
+  .fc .front .word{font-size:31px;font-weight:750;letter-spacing:.3px}
+  .fc .front .ipa{color:var(--acc);font-size:14px;margin-top:7px}
+  .fc .front .pos{color:var(--dim2);font-size:12.5px;margin-top:3px}
+  .fc .front .tap{position:absolute;bottom:14px;font-size:12px;color:var(--dim2)}
+  .fc .back .zh{font-size:21px;font-weight:650;margin-bottom:9px}
+  .fc .back .def{font-size:14.5px;margin-bottom:9px}
+  .fc .back .kv{font-size:13.5px;margin:3px 0}
+  .fc .back .kv b{color:var(--dim);font-weight:600}
+  .fc .back .note{font-size:12.5px;color:var(--warn);margin-top:9px;line-height:1.5}
+
+  /* ---------- wordlist ---------- */
+  .wl{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .wl details{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+  .wl summary{cursor:pointer;font-size:14.5px}
+  .wl summary b{font-weight:650}
+  .wl .body{font-size:13px;color:var(--dim);margin-top:8px;line-height:1.6}
+  .wl .body .l{color:var(--txt)}
+  .search{display:flex;gap:9px;margin-bottom:12px}
+  @media(max-width:640px){
+    .wl{grid-template-columns:1fr}
+    .arow{grid-template-columns:100px 1fr}
+    .fc .front .word{font-size:25px}
+  }
+  footer{margin-top:28px;color:var(--dim2);font-size:12px;text-align:center;line-height:1.8}
+  footer a{color:var(--dim)}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">Verbal&nbsp;<span>Advantage</span></div>
+    <span class="badge">Level 1 · 50 words</span>
+    <span class="badge" id="srcBadge">离线可用</span>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="quiz" class="on">📝 测验</button>
+    <button data-tab="cards">🃏 单词卡</button>
+    <button data-tab="list">📖 词汇表</button>
+    <button data-tab="about">ℹ️ 说明</button>
+  </nav>
+
+  <!-- ============ QUIZ ============ -->
+  <section id="tab-quiz">
+    <div id="quizIntro" class="card">
+      <h2>Level 1 自测</h2>
+      <p class="muted">
+        50 道题，四个部分：<b>词义连线</b>（20）· <b>同反义判断</b>（10）· <b>选词填空</b>（10）· <b>近义辨析</b>（10）。
+        题目和选项每次都会重新打乱。答完立刻能看到每题的答案与原书解析。
+      </p>
+      <div class="breakdown">
+        <span class="chip">题库：<b>50</b> 词</span>
+        <span class="chip">来源：<b>原书 Level 1</b></span>
+        <span class="chip">建议限时：<b>20 分钟</b></span>
+      </div>
+      <div class="btns">
+        <button class="btn primary" id="btnStart">开始测验</button>
+        <button class="btn ghost" id="btnResume" style="display:none">继续上次</button>
+      </div>
+      <p class="dim2" id="lastScore" style="margin-top:12px"></p>
+    </div>
+    <div id="quizBody" class="hidden"></div>
+  </section>
+
+  <!-- ============ FLASHCARDS ============ -->
+  <section id="tab-cards" class="hidden">
+    <div class="card">
+      <h2>单词卡</h2>
+      <p class="muted">点卡片翻面。可标记「已掌握」，标记过的词会被跳过。</p>
+      <div class="breakdown" style="margin-top:10px">
+        <span class="chip">已掌握 <b id="fcKnown">0</b>/<b id="fcTotal">50</b></span>
+        <span class="chip" id="fcPos">1 / 50</span>
+      </div>
+    </div>
+    <div class="fc-stage">
+      <div class="fc" id="fc">
+        <div class="face front">
+          <div class="word" id="fcWord">—</div>
+          <div class="ipa" id="fcIpa"></div>
+          <div class="pos" id="fcPos2"></div>
+          <div class="tap">点击卡片翻面</div>
+        </div>
+        <div class="face back" id="fcBack"></div>
+      </div>
+    </div>
+    <div class="btns">
+      <button class="btn ghost" id="fcPrev">← 上一个</button>
+      <button class="btn primary" id="fcKnow">✓ 已掌握，下一个</button>
+      <button class="btn ghost" id="fcNext">下一个 →</button>
+      <button class="btn ghost" id="fcReset">重置进度</button>
+    </div>
+  </section>
+
+  <!-- ============ WORDLIST ============ -->
+  <section id="tab-list" class="hidden">
+    <div class="card">
+      <h2>Level 1 词汇表（50）</h2>
+      <div class="search">
+        <input type="text" id="wlSearch" placeholder="搜索单词或中文释义…">
+      </div>
+      <div class="wl" id="wl"></div>
+    </div>
+  </section>
+
+  <!-- ============ ABOUT ============ -->
+  <section id="tab-about" class="hidden">
+    <div class="card">
+      <h2>说明</h2>
+      <p class="muted">
+        本页面是 <i>[GRE语文优势] Verbal Advantage</i> 的 <b>Level 1</b> 自测工具。
+        全部 50 个 keyword、释义与辨析要点均取自原书，题目中若干干扰项也沿用原书复习题的设计。
+      </p>
+      <p class="muted" style="margin-top:12px">
+        <b>纯静态、无后端：</b>打开 <code>index.html</code> 即可用，无需服务器、无需联网。
+        进度与成绩存在浏览器 localStorage，不会上传到任何地方。
+      </p>
+      <p class="muted" style="margin-top:12px">
+        <b>关于选项乱序：</b>每次开始测验，选项顺序都会重新打乱，方便反复练。
+      </p>
+      <div class="breakdown" style="margin-top:14px">
+        <span class="chip">Level 1 <b>可用</b></span>
+        <span class="chip">Level 2–10 <b>待补</b></span>
+      </div>
+      <p class="dim2" style="margin-top:14px">
+        想把 Level 2–10 也加进来，只要往 <code>web/data.js</code> 里补单词和题目即可。
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    数据来源：<span id="srcName"></span> · Keywords 1–50 (Level 1)<br>
+    纯前端单页 · 可离线运行 · 可直接托管在 GitHub Pages
+  </footer>
+</div>
+
+<script src="data.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var LS_KNOWN = 'va.l1.known';
+  var LS_LAST = 'va.l1.last';
+  var L1 = VA_LEVEL1.slice();
+
+  /* ---------------- utils ---------------- */
+  function shuffle(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+  function load(key, dflt) {
+    try {
+      var v = localStorage.getItem(key);
+      return v == null ? dflt : JSON.parse(v);
+    } catch (e) { return dflt; }
+  }
+  function save(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+  }
+  function $(id) { return document.getElementById(id); }
+
+  /* ---------------- tabs ---------------- */
+  var tabs = document.querySelectorAll('#tabs button');
+  Array.prototype.forEach.call(tabs, function (b) {
+    b.addEventListener('click', function () {
+      Array.prototype.forEach.call(tabs, function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      ['quiz', 'cards', 'list', 'about'].forEach(function (t) {
+        $('tab-' + t).classList.toggle('hidden', t !== b.dataset.tab);
+      });
+      if (b.dataset.tab === 'cards') renderCard();
+    });
+  });
+
+  /* ---------------- quiz state ---------------- */
+  // answers: { <qid>: <selectedKey> }
+  var quiz = null;
+
+  function buildQuiz() {
+    var parts = [];
+
+    /* Part A */
+    var aItems = shuffle(VA_PART_A.items);
+    var aChoices = shuffle(VA_PART_A.choices);
+    parts.push({
+      id: 'A', title: VA_PART_A.title, instruction: VA_PART_A.instruction,
+      type: 'match', choices: aChoices,
+      items: aItems.map(function (it, i) {
+        return { qid: 'A' + i, word: it.word, answer: it.answer };
+      })
+    });
+
+    /* Part B — 题目顺序保持原书顺序（打乱选项即可，题目次序本就有难度递进） */
+    parts.push({
+      id: 'B', title: VA_PART_B.title, instruction: VA_PART_B.instruction,
+      type: 'choice',
+      items: VA_PART_B.items.map(function (it, i) {
+        return {
+          qid: 'B' + i, a: it.a, b: it.b, answer: it.answer, reason: it.reason,
+          choices: VA_PART_B.options
+        };
+      })
+    });
+
+    /* Part C */
+    parts.push({
+      id: 'C', title: VA_PART_C.title, instruction: VA_PART_C.instruction,
+      type: 'bank', bank: shuffle(VA_PART_C.bank),
+      items: VA_PART_C.items.map(function (it, i) {
+        return {
+          qid: 'C' + i, text: it.text, answer: it.answer,
+          hint: it.hint, reason: it.reason
+        };
+      })
+    });
+
+    /* Part D — 题目顺序同样保持原书顺序，只打乱每个词的四个选项 */
+    parts.push({
+      id: 'D', title: VA_PART_D.title, instruction: VA_PART_D.instruction,
+      type: 'choice',
+      items: VA_PART_D.items.map(function (it, i) {
+        return {
+          qid: 'D' + i, word: it.word, answer: it.answer, reason: it.reason,
+          bonus: !!it.bonus, choices: shuffle(it.choices)
+        };
+      })
+    });
+
+    return { parts: parts, answers: {}, submitted: false };
+  }
+
+  function allItems() {
+    var out = [];
+    quiz.parts.forEach(function (p) { p.items.forEach(function (it) { out.push(it); }); });
+    return out;
+  }
+
+  function answeredCount() {
+    var n = 0;
+    allItems().forEach(function (it) { if (quiz.answers[it.qid] != null) n++; });
+    return n;
+  }
+
+  /* ---------------- render quiz ---------------- */
+  function renderQuiz() {
+    var total = allItems().length;
+    var done = answeredCount();
+    var html = '';
+
+    html += '<div class="prog"><div class="row"><span>已作答 <b>' + done + '</b> / ' + total +
+            '</span><span id="progPct">' + Math.round(done / total * 100) + '%</span></div>' +
+            '<div class="bar"><i id="progBar" style="width:' + (done / total * 100) + '%"></i></div></div>';
+
+    quiz.parts.forEach(function (p, pi) {
+      html += '<div class="card"><h2>' + esc(p.title) + ' <span class="dim2">' + p.items.length + ' 题</span></h2>';
+      html += '<p class="muted">' + esc(p.instruction) + '</p>';
+
+      if (p.type === 'match') {
+        html += '<p class="dim2" style="margin:10px 0 4px">选项速查</p><div class="bank">';
+        p.choices.forEach(function (c) {
+          html += '<span>' + esc(c.key) + '. ' + esc(c.text) + '</span>';
+        });
+        html += '</div>';
+        p.items.forEach(function (it) {
+          var sel = quiz.answers[it.qid];
+          var cls = '', dis = '';
+          if (quiz.submitted) {
+            cls = sel === it.answer ? 'good' : 'bad';
+            dis = ' disabled';
+          }
+          html += '<div class="arow"><div><div class="aword">' + esc(it.word) + '</div>' +
+                  '<div class="meta">选一个释义</div></div>' +
+                  '<select data-qid="' + it.qid + '" class="' + cls + '"' + dis + '>' +
+                  '<option value="">— 请选择 —</option>';
+          p.choices.forEach(function (c) {
+            html += '<option value="' + c.key + '"' + (sel === c.key ? ' selected' : '') + '>' +
+                    c.key + '. ' + esc(c.text) + '</option>';
+          });
+          html += '</select></div>';
+          if (quiz.submitted) html += explainHtml(it, sel, it.answer);
+        });
+      }
+
+      if (p.type === 'choice') {
+        p.items.forEach(function (it, ii) {
+          var sel = quiz.answers[it.qid];
+          html += '<div class="q"><div class="qhead"><span class="qn">' + (ii + 1) + '.</span><span class="qtext">';
+          if (it.a) {
+            html += '<span class="pair"><span class="w">' + esc(it.a) + '</span>' +
+                    '<span class="vs">vs</span><span class="w">' + esc(it.b) + '</span></span>';
+          } else {
+            html += '<b>' + esc(it.word) + '</b>' + (it.bonus ? ' <span class="dim2">（加分题）</span>' : '');
+          }
+          html += '</span></div>';
+          it.choices.forEach(function (c) {
+            var on = sel === c.k;
+            var cls = 'opt';
+            if (quiz.submitted) {
+              if (c.k === it.answer) cls += ' good';
+              else if (on) cls += ' bad';
+            }
+            html += '<label class="' + cls + '"><input type="radio" name="' + it.qid + '" ' +
+                    'data-qid="' + it.qid + '" value="' + esc(c.k) + '"' + (on ? ' checked' : '') +
+                    (quiz.submitted ? ' disabled' : '') + '><span class="zh">' +
+                    esc(c.k) + '. ' + esc(c.t) + '</span></label>';
+          });
+          html += '</div>';
+          if (quiz.submitted) {
+            var selText = null;
+            it.choices.forEach(function (c) { if (c.key === sel) selText = c.k + '. ' + c.t; });
+            html += explainHtml(it, sel, it.answer, selText);
+          }
+        });
+      }
+
+      if (p.type === 'bank') {
+        html += '<p class="dim2" style="margin:10px 0 2px">词库（每词只用一次）</p><div class="bank">';
+        p.bank.forEach(function (w) { html += '<span>' + esc(w) + '</span>'; });
+        html += '</div>';
+        p.items.forEach(function (it, ii) {
+          var sel = quiz.answers[it.qid];
+          var cls = '';
+          if (quiz.submitted) cls = (sel === it.answer) ? 'good' : 'bad';
+          var disp = it.text.replace('______',
+            '<input type="text" style="display:inline-block;width:150px;margin:0 4px;padding:3px 8px" ' +
+            'data-qid="' + it.qid + '" value="' + esc(sel || '') + '"' +
+            (quiz.submitted ? ' disabled' : '') + ' placeholder="填词…">');
+          html += '<div class="q"><div class="qhead"><span class="qn">' + (ii + 1) + '.</span>' +
+                  '<span class="qtext">' + disp + '</span></div>';
+          if (it.hint) html += '<p class="dim2" style="margin:0 0 4px 31px">💡 ' + esc(it.hint) + '</p>';
+          html += '</div>';
+          if (quiz.submitted) html += explainHtml(it, sel, it.answer);
+        });
+      }
+
+      html += '</div>';
+    });
+
+    /* result panel + actions */
+    if (quiz.submitted) {
+      html += resultHtml();
+    }
+    html += '<div class="btns">';
+    if (!quiz.submitted) {
+      html += '<button class="btn primary" id="btnSubmit">提交并批改</button>';
+      html += '<button class="btn ghost" id="btnAbandon">放弃本次</button>';
+    } else {
+      html += '<button class="btn primary" id="btnAgain">再测一次</button>';
+      html += '<button class="btn ghost" id="btnTop">回到顶部</button>';
+    }
+    html += '</div>';
+
+    var body = $('quizBody');
+    body.innerHTML = html;
+    body.classList.remove('hidden');
+    $('quizIntro').classList.add('hidden');
+    bindQuizEvents();
+  }
+
+  function explainHtml(it, sel, answer, selText) {
+    var correct = sel === answer;
+    var ansLabel = String(answer);
+    if (it.choices) {
+      it.choices.forEach(function (c) { if (c.key === answer) ansLabel = c.k + '. ' + c.t; });
+    }
+    var h = '<div class="exp' + (correct ? '' : ' bad') + '">';
+    if (sel == null || sel === '') {
+      h += '<span class="tag no">未作答</span> 正确答案：<b>' + esc(ansLabel) + '</b>';
+    } else if (correct) {
+      h += '<span class="tag ok">✓ 正确</span>';
+    } else {
+      h += '<span class="tag no">✗ 你选了</span> ' + esc(selText || sel) +
+           ' · 正确答案：<b>' + esc(ansLabel) + '</b>';
+    }
+    if (it.reason) h += '<span class="explain-src">' + esc(it.reason) + '</span>';
+    h += '</div>';
+    return h;
+  }
+
+  function resultHtml() {
+    var items = allItems();
+    var right = 0;
+    items.forEach(function (it) { if (quiz.answers[it.qid] === it.answer) right++; });
+    var total = items.length;
+    var pct = Math.round(right / total * 100);
+
+    var byPart = {};
+    quiz.parts.forEach(function (p) {
+      var r = 0;
+      p.items.forEach(function (it) { if (quiz.answers[it.qid] === it.answer) r++; });
+      byPart[p.id] = { r: r, t: p.items.length, title: p.title };
+    });
+
+    var verdict, color;
+    if (pct >= 90) { verdict = 'Level 1 已扎实掌握，可以直接进 Level 2。'; color = 'var(--ok)'; }
+    else if (pct >= 70) { verdict = '核心义已懂，个别词需要回看原书例句。'; color = 'var(--acc)'; }
+    else if (pct >= 50) { verdict = '建议把 Level 1 原文再读一遍，重点看每个词的第一句释义。'; color = 'var(--warn)'; }
+    else { verdict = '不要急着往下走 —— 原书作者明确建议：进入下一级前把本级重读一到两遍。'; color = 'var(--bad)'; }
+
+    var h = '<div class="card"><h2>成绩</h2><div class="score">' +
+      '<div class="ring" style="--p:' + pct + '"><div><div class="n" style="color:' + color + '">' +
+      right + '</div><div class="d">/ ' + total + ' · ' + pct + '%</div></div></div>' +
+      '<div style="flex:1;min-width:220px"><div class="verdict" style="color:' + color + '">' + esc(verdict) + '</div>' +
+      '<div class="breakdown">';
+    ['A', 'B', 'C', 'D'].forEach(function (k) {
+      var b = byPart[k];
+      h += '<span class="chip">' + esc(b.title) + ' <b>' + b.r + '</b>/' + b.t + '</span>';
+    });
+    h += '</div></div></div></div>';
+    return h;
+  }
+
+  /* ---------------- quiz events ---------------- */
+  function bindQuizEvents() {
+    var body = $('quizBody');
+
+    body.addEventListener('change', function (e) {
+      var t = e.target;
+      if (t.dataset && t.dataset.qid) {
+        quiz.answers[t.dataset.qid] = t.value;
+        updateProgress();
+      }
+    });
+    body.addEventListener('input', function (e) {
+      var t = e.target;
+      if (t.tagName === 'INPUT' && t.type === 'text' && t.dataset && t.dataset.qid) {
+        quiz.answers[t.dataset.qid] = t.value;
+        updateProgress();
+      }
+    });
+    body.addEventListener('click', function (e) {
+      var id = e.target && e.target.id;
+      if (id === 'btnSubmit') submitQuiz();
+      else if (id === 'btnAgain') { startQuiz(); }
+      else if (id === 'btnAbandon') { quiz = null; $('quizBody').classList.add('hidden'); $('quizIntro').classList.remove('hidden'); refreshResume(); }
+      else if (id === 'btnTop') window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
+
+  function updateProgress() {
+    var total = allItems().length, done = answeredCount();
+    var bar = $('progBar'), pct = $('progPct');
+    if (bar) bar.style.width = (done / total * 100) + '%';
+    if (pct) pct.textContent = Math.round(done / total * 100) + '%';
+    var row = document.querySelector('.prog .row span b');
+    if (row) row.textContent = done;
+  }
+
+  function submitQuiz() {
+    quiz.submitted = true;
+    var items = allItems(), right = 0;
+    items.forEach(function (it) {
+      var v = quiz.answers[it.qid];
+      if (typeof v === 'string') { v = v.trim(); quiz.answers[it.qid] = v; }
+      if (v === it.answer) right++;
+    });
+    save(LS_LAST, { right: right, total: items.length, at: Date.now() });
+    renderQuiz();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function startQuiz() {
+    quiz = buildQuiz();
+    renderQuiz();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function refreshResume() {
+    var last = load(LS_LAST, null);
+    var el = $('lastScore'), btn = $('btnResume');
+    if (last) {
+      var d = new Date(last.at);
+      el.textContent = '上次成绩：' + last.right + ' / ' + last.total +
+        '（' + Math.round(last.right / last.total * 100) + '%） · ' +
+        d.toLocaleString('zh-CN');
+    } else { el.textContent = ''; }
+    btn.style.display = 'none';
+  }
+
+  $('btnStart').addEventListener('click', startQuiz);
+
+  /* ---------------- flashcards ---------------- */
+  var fcState = { order: [], idx: 0, known: load(LS_KNOWN, {}) };
+
+  function buildFcOrder() {
+    // 只练还没标记「已掌握」的词；全部掌握后回到整册重刷
+    var un = L1.filter(function (w) { return !fcState.known[w.word]; });
+    fcState.order = shuffle(un.length ? un : L1);
+    fcState.idx = 0;
+  }
+  function knownCount() {
+    return L1.filter(function (w) { return fcState.known[w.word]; }).length;
+  }
+  function renderCard() {
+    if (!fcState.order.length) buildFcOrder();
+    var w = fcState.order[fcState.idx];
+    if (!w) return;
+    var fc = $('fc');
+    fc.classList.remove('flip');
+    $('fcWord').textContent = w.word;
+    $('fcIpa').textContent = w.ipa ? '/' + w.ipa + '/' : '';
+    $('fcPos2').textContent = w.pos || '';
+    var b = '<div class="zh">' + esc(w.zh) + '</div>';
+    b += '<div class="def">' + esc(w.def) + '</div>';
+    if (w.syn && w.syn.length) b += '<div class="kv"><b>近义：</b>' + esc(w.syn.join(', ')) + '</div>';
+    if (w.ant && w.ant.length) b += '<div class="kv"><b>反义：</b>' + esc(w.ant.join(', ')) + '</div>';
+    if (w.note) b += '<div class="note">⚠ ' + esc(w.note) + '</div>';
+    $('fcBack').innerHTML = b;
+    $('fcKnown').textContent = knownCount();
+    $('fcTotal').textContent = L1.length;
+    $('fcPos').textContent = (fcState.idx + 1) + ' / ' + fcState.order.length;
+  }
+  $('fc').addEventListener('click', function () { this.classList.toggle('flip'); });
+  $('fcNext').addEventListener('click', function () {
+    fcState.idx = (fcState.idx + 1) % fcState.order.length; renderCard();
+  });
+  $('fcPrev').addEventListener('click', function () {
+    fcState.idx = (fcState.idx - 1 + fcState.order.length) % fcState.order.length; renderCard();
+  });
+  $('fcKnow').addEventListener('click', function () {
+    var w = fcState.order[fcState.idx];
+    if (w) { fcState.known[w.word] = 1; save(LS_KNOWN, fcState.known); }
+    // 从队列中移除已掌握的词，停留在同一位置即下一个
+    buildFcOrder();
+    renderCard();
+  });
+  $('fcReset').addEventListener('click', function () {
+    fcState.known = {}; save(LS_KNOWN, {}); buildFcOrder(); renderCard();
+  });
+
+  /* ---------------- word list ---------------- */
+  function renderList(q) {
+    q = (q || '').trim().toLowerCase();
+    var html = '';
+    L1.forEach(function (w) {
+      if (q && w.word.toLowerCase().indexOf(q) < 0 &&
+          (w.zh || '').indexOf(q) < 0 &&
+          (w.def || '').toLowerCase().indexOf(q) < 0) return;
+      html += '<details><summary><b>' + esc(w.word) + '</b> <span class="dim2">' +
+        esc(w.zh) + '</span></summary><div class="body">' +
+        (w.ipa ? '<div class="l">/' + esc(w.ipa) + '/ · ' + esc(w.pos) + '</div>' : '') +
+        '<div style="margin-top:5px">' + esc(w.def) + '</div>' +
+        (w.syn && w.syn.length ? '<div style="margin-top:5px"><b>近义：</b>' + esc(w.syn.join(', ')) + '</div>' : '') +
+        (w.ant && w.ant.length ? '<div><b>反义：</b>' + esc(w.ant.join(', ')) + '</div>' : '') +
+        (w.note ? '<div style="margin-top:5px;color:var(--warn)">⚠ ' + esc(w.note) + '</div>' : '') +
+        '</div></details>';
+    });
+    $('wl').innerHTML = html || '<p class="muted">没有匹配的单词。</p>';
+  }
+  $('wlSearch').addEventListener('input', function () { renderList(this.value); });
+
+  /* ---------------- init ---------------- */
+  $('srcName').textContent = VA_SOURCE;
+  $('fcTotal').textContent = L1.length;
+  renderList('');
+  refreshResume();
+})();
+</script>
+</body>
+</html>
