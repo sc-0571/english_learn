@@ -56,6 +56,17 @@ const errors = [];
     doc.querySelector('#tabs button[data-tab="' + name + '"]')
       .dispatchEvent(new win.Event('click', { bubbles: true }));
   };
+  /* 自绘弹窗的辅助函数（App 不使用原生 confirm，因为 file:// 下会被浏览器拦截） */
+  const modal = () => doc.querySelector('.modal');
+  const modalButtons = () => (modal() ? Array.from(modal().querySelectorAll('.acts button')) : []);
+  const modalText = () => (modal() ? modal().querySelector('.msg').textContent : '');
+  const clickModal = (label) => {
+    const b = modalButtons().find((x) => x.textContent.indexOf(label) >= 0);
+    if (!b) throw new Error('弹窗里找不到按钮「' + label + '」；现有: ' +
+      modalButtons().map((x) => x.textContent).join('/'));
+    b.dispatchEvent(new win.Event('click', { bubbles: true }));
+    return true;
+  };
 
   console.log('\n=== 1. 脚本加载与初始化 ===');
   is(typeof win.VA_WORDS === 'object' && win.VA_WORDS.length > 50, 'data.js 已加载并挂到 window');
@@ -231,13 +242,22 @@ const errors = [];
   is($('quizBody').querySelectorAll('.exp.bad').length === 50 - score, '错题解析数 = 50 - 得分');
 
   console.log('\n=== 5. 只做一小部分就交卷 → 未作答的不算错题 ===');
-  // 真实用户最容易踩的路径：做几题就提交。早期版本把 47 道「空题」也记成错题，
-  // 错题本瞬间被塞满 50 条，真正的错题反而被淹没 —— 看起来就像「错题本没用」。
-  win.confirm = () => true;                     // 模拟用户点「确定」
+  // 真实用户最容易踩的路径：做几题就提交。两个历史 bug 都在这里：
+  //   ① 把 47 道「空题」也记成错题，错题本被塞满 50 条
+  //   ② 用原生 confirm 询问，file:// 下被浏览器静默拦截 → 点提交毫无反应
   $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
   const sparseWord = $('quizBody').querySelector('.aword').textContent.trim();
   answerWrongA(sparseWord);                     // 只故意答错这一题，其余全空着
   $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
+
+  // ② 必须出现**页面内**弹窗（而不是依赖 window.confirm）
+  is(!!modal(), '漏答时弹出页面内确认框（不依赖原生 confirm）');
+  is(modalText().indexOf('49') >= 0 || modalText().indexOf('题没作答') >= 0,
+     '弹窗说明了未作答题数: ' + modalText().split('\n')[0]);
+  is($('quizBody').querySelectorAll('.exp').length === 0, '弹窗未确认前不进入批改状态');
+  clickModal('交卷');                           // 选「就这样交卷」
+  is(!modal(), '点「就这样交卷」后弹窗关闭');
+
   const sp = JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}');
   is(Object.keys(sp).length === 1,
      '只答错 1 题 → 错题本只有 1 题（实际 ' + Object.keys(sp).length + '）');
@@ -267,23 +287,25 @@ const errors = [];
   });
   is(mismatch === 0, 'Part A 错题记录的正确答案文字没有串到别的词');
 
-  console.log('\n=== 5c. 点「取消」应当什么都不记 ===');
+  console.log('\n=== 5c. 点「回去补完」应当什么都不记 ===');
   $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
   const beforeCancel = win.localStorage.getItem('va.l1.mistakes');
   answerWrongA($('quizBody').querySelector('.aword').textContent.trim());
-  win.confirm = () => false;                    // 模拟用户点「取消」
   $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
-  is(win.localStorage.getItem('va.l1.mistakes') === beforeCancel, '点「取消」后错题本没有被改动');
-  is($('quizBody').querySelectorAll('.exp').length === 0, '点「取消」后没有进入批改状态');
-  is(!!$('btnSubmit'), '点「取消」后停留在答题状态，可以继续补完');
-  win.confirm = () => true;                     // 收尾：确认提交，推进状态
+  is(!!modal(), '再次弹出确认框');
+  clickModal('回去补完');                       // 选「回去补完」
+  is(!modal(), '弹窗已关闭');
+  is(win.localStorage.getItem('va.l1.mistakes') === beforeCancel, '点「回去补完」后错题本没有被改动');
+  is($('quizBody').querySelectorAll('.exp').length === 0, '点「回去补完」后没有进入批改状态');
+  is(!!$('btnSubmit'), '停留在答题状态，可以继续补完');
+  // 收尾：这次选「就这样交卷」，推进状态
   $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
+  clickModal('交卷');
   is(!!$('btnAgain'), '确认提交后出现「再测一次」');
 
   console.log('\n=== 6. 全部答错 → 错题本必须是 50 条且答案对得上 ===');
   // 这一段是核心回归测试：把四个部分全部故意答错，逐条核对错题本里的
   // 「正确答案」文字确实属于那道题（而不是串到别的题去）。
-  win.confirm = () => true;
   $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
   const wrongPlan = fillAllWrong();
   is(wrongPlan.length === 50, '已把 50 题全部答错（实际 ' + wrongPlan.length + '）');
@@ -349,7 +371,6 @@ const errors = [];
   is(rep.indexOf('我选了: zzz-not-a-word') >= 0, '报告里 Part C 的错选是原文而不是空');
 
   console.log('\n=== 6c. 重测 50 题全部答对 → 错题本清空 ===');
-  win.confirm = () => true;
   switchTo('quiz');
   $('btnRetest').dispatchEvent(new win.Event('click', { bubbles: true }));
   is($('quizBody').querySelectorAll('.arow').length === 20, '重测包含 20 道 Part A');
@@ -363,7 +384,6 @@ const errors = [];
 
 
   console.log('\n=== 6d. 全对一题不错 → 错题本保持空 ===');
-  win.confirm = () => true;
   $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
   fillCorrect();
   $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
@@ -443,13 +463,23 @@ const errors = [];
     is(report.indexOf(needle) >= 0, '报告含「' + needle + '」');
   });
 
-  console.log('\n=== 11. 清空错题本 ===');
-  win.confirm = () => true;
+  console.log('\n=== 11. 清空错题本（弹窗确认）===');
   $('btnClear').dispatchEvent(new win.Event('click', { bubbles: true }));
+  is(!!modal(), '点清空弹出页面内确认框');
+  is(modalText().indexOf('不可恢复') >= 0, '弹窗提示不可恢复');
+  clickModal('取消');
+  is(Object.keys(JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}')).length > 0,
+     '点「取消」后错题仍在');
+  $('btnClear').dispatchEvent(new win.Event('click', { bubbles: true }));
+  clickModal('确定清空');
   is(Object.keys(JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}')).length === 0,
      '清空后没有错题');
   is($('reviewList').querySelectorAll('.mist').length === 0, '错题列表清空');
   is($('reviewList').textContent.indexOf('错题本是空的') >= 0, '显示空状态');
+  // 空错题本时点重测，应给出提示而不是静默无反应
+  $('btnRetest2').dispatchEvent(new win.Event('click', { bubbles: true }));
+  is(!!modal(), '空错题本时点重测会给出提示');
+  clickModal('好');
 
   console.log('\n=== 12. 单词卡 ===');
   switchTo('cards');
@@ -479,6 +509,44 @@ const errors = [];
   console.log('\n=== 14. 运行期错误检查 ===');
   if (errors.length) { errors.forEach(bad); }
   else ok('运行期间没有 JS 错误');
+
+  console.log('\n=== 15. 不允许依赖原生 confirm/alert ===');
+  // file:// 打开时 Chrome/Edge 会静默拦截原生对话框（返回 undefined、不显示），
+  // 导致点「提交并批改」毫无反应。App 必须只用页面内自绘弹窗。
+  const htmlSrc = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
+  const nativeCalls = htmlSrc.match(/(?:window\.)?(?:confirm|alert|prompt)\s*\(/g) || [];
+  is(nativeCalls.length === 0,
+     'index.html 源码里没有原生 confirm/alert/prompt 调用（发现 ' +
+     nativeCalls.length + ' 处' + (nativeCalls.length ? ': ' + nativeCalls.join(' ') : '') + '）');
+  is(htmlSrc.indexOf('function showModal') >= 0, '存在页面内自绘弹窗 showModal()');
+  // 更强的验证：把原生对话框换成「一调用就抛错」，然后完整走一遍
+  // 需要确认的路径（漏答提交 / 清空错题本）。只要 App 碰了原生对话框就会炸。
+  let nativeHit = '';
+  win.confirm = function () { nativeHit = 'confirm'; throw new Error('调用了原生 confirm'); };
+  win.alert = function () { nativeHit = 'alert'; throw new Error('调用了原生 alert'); };
+  win.prompt = function () { nativeHit = 'prompt'; throw new Error('调用了原生 prompt'); };
+  try {
+    // a) 全部答对 → 无需确认，直接批改
+    $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
+    fillCorrect();
+    $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
+    is(!!$('btnAgain'), '全对提交无弹窗，直接进入批改');
+    // b) 只答一题 → 必须走自绘弹窗
+    $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
+    answerWrongA($('quizBody').querySelector('.aword').textContent.trim());
+    $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
+    is(!!modal(), '漏答提交走的是自绘弹窗');
+    clickModal('交卷');
+    is(!!$('btnAgain'), '弹窗确认后正常批改');
+    // c) 清空错题本 → 自绘弹窗
+    switchTo('review');
+    $('btnClear').dispatchEvent(new win.Event('click', { bubbles: true }));
+    is(!!modal(), '清空走的是自绘弹窗');
+    clickModal('取消');
+    ok('原生对话框被替换为抛错函数后，全部确认流程仍正常（未触碰原生对话框）');
+  } catch (e) {
+    bad('确认流程触发了原生对话框: ' + nativeHit + ' — ' + e.message);
+  }
 
   console.log('\n' + '='.repeat(52));
   console.log(fail === 0 ? 'DOM 冒烟测试全部通过。' : fail + ' 项失败。');

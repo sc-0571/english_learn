@@ -58,6 +58,16 @@
   .mist .src{font-size:12.5px;color:var(--dim);margin-top:7px;line-height:1.6}
   .empty{padding:26px;text-align:center;color:var(--dim)}
 
+  /* ---------- 自绘弹窗（不用原生 confirm，避免被浏览器拦截） ---------- */
+  .modal{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:20px;
+         background:rgba(8,9,12,.72);backdrop-filter:blur(3px);animation:fade .15s ease}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+              max-width:400px;width:100%;padding:22px;box-shadow:0 18px 50px rgba(0,0,0,.55)}
+  .modal .box h3{margin:0 0 10px;font-size:16.5px}
+  .modal .box .msg{margin:0;color:var(--dim);font-size:14px;line-height:1.7;white-space:pre-line}
+  .modal .acts{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+
   .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:14px}
   .card h2{margin:0 0 6px;font-size:17px}
   .muted{color:var(--dim);font-size:13.5px}
@@ -374,6 +384,53 @@
     try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
   }
   function $(id) { return document.getElementById(id); }
+
+  /* ---------------- 自绘弹窗 ----------------
+     为什么不用 window.confirm：
+       以 file:// 打开时，Chrome/Edge 会**静默拦截**原生对话框（返回 undefined、
+       对话框不显示），于是点「提交并批改」看起来完全没反应。
+       这里用页面里的 div 自绘，任何环境都可靠。 */
+  function showModal(opts) {
+    var host = document.createElement('div');
+    host.className = 'modal';
+    var box = document.createElement('div');
+    box.className = 'box';
+    var h = document.createElement('h3');
+    h.textContent = opts.title || '';
+    var p = document.createElement('p');
+    p.className = 'msg';
+    p.textContent = opts.message || '';
+    var acts = document.createElement('div');
+    acts.className = 'acts';
+
+    function close() {
+      if (host.parentNode) host.parentNode.removeChild(host);
+      document.removeEventListener('keydown', onKey);
+    }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+
+    (opts.buttons || []).forEach(function (b) {
+      var el = document.createElement('button');
+      el.className = 'btn' + (b.primary ? ' primary' : ' ghost');
+      el.textContent = b.label;
+      el.addEventListener('click', function () {
+        close();
+        if (typeof b.onClick === 'function') b.onClick();
+      });
+      acts.appendChild(el);
+    });
+
+    box.appendChild(h);
+    box.appendChild(p);
+    box.appendChild(acts);
+    host.appendChild(box);
+    document.body.appendChild(host);
+    document.addEventListener('keydown', onKey);
+    // 焦点给第一个按钮，方便键盘操作
+    var first = acts.querySelector('button');
+    if (first) first.focus();
+    return close;
+  }
 
   /* ---------------- tabs ---------------- */
   var TAB_IDS = ['quiz', 'review', 'cards', 'list', 'about'];
@@ -777,19 +834,30 @@
 
   function submitQuiz() {
     // 先检查有没有漏答 —— 没作答不等于答错，不应记进错题本，
-    // 但要让用户有机会回去补完（早期版本把空答案一律算错题，
-    // 结果做 3 题就提交会把错题本塞满 47 道"空题"，真正的错题反而被淹没）。
+    // 但要让用户有机会回去补完。用页面内弹窗，不用原生 confirm（会被浏览器拦截）。
     var unanswered = allItems().filter(function (it) {
       var v = quiz.answers[it.qid];
       return v == null || (typeof v === 'string' && v.trim() === '');
     });
-    if (unanswered.length && !quiz.forceSubmit && typeof window.confirm === 'function') {
-      var msg = '还有 ' + unanswered.length + ' 题没作答。\n\n' +
-        '・点「确定」= 就这样交卷（没作答的题不计入错题本）\n' +
-        '・点「取消」= 回去补完\n\n' +
-        '（想只练一部分也可以：直接交卷，做错的题照样会记进错题本）';
-      if (!window.confirm(msg)) return;
+    if (unanswered.length && !quiz.forceSubmit) {
+      var answered = allItems().length - unanswered.length;
+      showModal({
+        title: '还有 ' + unanswered.length + ' 题没作答',
+        message: '已作答 ' + answered + ' 题，错了的会照常记进错题本。\n' +
+                 '未作答的 ' + unanswered.length + ' 题不计入错题本。\n\n' +
+                 '想只练一部分的话，直接选「就这样交卷」即可。',
+        buttons: [
+          { label: '← 回去补完', onClick: function () {} },
+          { label: '就这样交卷', primary: true, onClick: function () { doSubmit(); } }
+        ]
+      });
+      return;
     }
+    doSubmit();
+  }
+
+  /* 真正的批改逻辑（与确认弹窗解耦，保证一定能执行） */
+  function doSubmit() {
     quiz.forceSubmit = true;
     quiz.submitted = true;
 
@@ -1172,15 +1240,39 @@
   });
 
   $('btnClear').addEventListener('click', function () {
-    if (!mistakeKeys().length) { alert('错题本已经是空的。'); return; }
-    if (!confirm('确定清空错题本？此操作不可恢复。')) return;
-    saveMistakes({});
-    $('reportBox').classList.add('hidden');
-    renderReview();
+    if (!mistakeKeys().length) {
+      showModal({
+        title: '错题本已经是空的',
+        message: '做一次测验，答错的题会自动记进来。',
+        buttons: [{ label: '知道了', primary: true }]
+      });
+      return;
+    }
+    showModal({
+      title: '清空错题本？',
+      message: '将删除全部 ' + mistakeKeys().length + ' 条错题记录，此操作不可恢复。',
+      buttons: [
+        { label: '取消' },
+        {
+          label: '确定清空', primary: true, onClick: function () {
+            saveMistakes({});
+            $('reportBox').classList.add('hidden');
+            renderReview();
+          }
+        }
+      ]
+    });
   });
 
   $('btnRetest2').addEventListener('click', function () {
-    if (!mistakeKeys().length) { alert('错题本是空的，先做一次测验吧。'); return; }
+    if (!mistakeKeys().length) {
+      showModal({
+        title: '错题本是空的',
+        message: '先去做一次测验吧，答错的题会自动记进来。',
+        buttons: [{ label: '好', primary: true, onClick: function () { switchTab('quiz'); } }]
+      });
+      return;
+    }
     switchTab('quiz');
     startQuiz(mistakeKeys());
   });
