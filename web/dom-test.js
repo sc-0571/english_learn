@@ -129,6 +129,57 @@ const errors = [];
     return n;
   }
 
+  /* 把当前这套测验全部填上错误答案（用于验证「全错」时的记录是否正确）。
+     返回每题 { qid, ok, expectAnswerText } —— expectAnswerText 是这题真正该显示的答案。 */
+  function fillAllWrong() {
+    const info = [];
+    // Part A
+    Array.prototype.forEach.call($('quizBody').querySelectorAll('select'), (sel) => {
+      const word = sel.closest('.arow').querySelector('.aword').textContent.trim();
+      const item = A.items.find((x) => x.word === word);
+      if (!item) return;
+      const wantText = aChoiceText[item.answer];
+      const badOpt = Array.prototype.slice.call(sel.options)
+        .find((o) => o.value && o.textContent.replace(/^[A-Z]\.\s*/, '') !== wantText);
+      if (!badOpt) return;
+      sel.value = badOpt.value;
+      sel.dispatchEvent(new win.Event('change', { bubbles: true }));
+      info.push({ qid: sel.getAttribute('data-qid'), part: 'A', word,
+        expectAnswer: item.answer + '. ' + wantText });
+    });
+    // Part B / D
+    const byGroup = {};
+    Array.prototype.forEach.call($('quizBody').querySelectorAll('input[type=radio]'), (r) => {
+      (byGroup[r.name] = byGroup[r.name] || []).push(r);
+    });
+    Object.keys(byGroup).forEach((name) => {
+      const m = /^([BD])(\d+)$/.exec(name);
+      if (!m) return;
+      const src = m[1] === 'B' ? B.items : D.items;
+      const it = src[parseInt(m[2], 10)];
+      if (!it) return;
+      const wrong = byGroup[name].find((r) => r.value !== it.answer);
+      if (!wrong) return;
+      wrong.checked = true;
+      wrong.dispatchEvent(new win.Event('change', { bubbles: true }));
+      const opts = it.choices || it.options || [];
+      const ch = opts.find((c) => c.k === it.answer);
+      info.push({ qid: name, part: m[1],
+        word: it.lookup || it.word || (it.a + ' vs ' + it.b),
+        expectAnswer: it.answer + '. ' + (ch ? ch.t : '') });
+    });
+    // Part C —— 故意写一个不属于词库的词
+    Array.prototype.forEach.call($('quizBody').querySelectorAll('input[type=text]'), (inp) => {
+      const qid = String(inp.getAttribute('data-qid'));
+      const it = C.items[parseInt(qid.replace(/^C/, ''), 10)];
+      if (!it) return;
+      inp.value = 'zzz-not-a-word';
+      inp.dispatchEvent(new win.Event('input', { bubbles: true }));
+      info.push({ qid, part: 'C', word: it.text, expectAnswer: it.answer });
+    });
+    return info;
+  }
+
   /* 给某个 Part A 的词故意选一个错误选项 */
   function answerWrongA(matchKey) {
     const row = Array.prototype.slice.call($('quizBody').querySelectorAll('.arow'))
@@ -229,12 +280,94 @@ const errors = [];
   $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
   is(!!$('btnAgain'), '确认提交后出现「再测一次」');
 
-  console.log('\n=== 6. 全对一题不错 → 错题本保持空 ===');
+  console.log('\n=== 6. 全部答错 → 错题本必须是 50 条且答案对得上 ===');
+  // 这一段是核心回归测试：把四个部分全部故意答错，逐条核对错题本里的
+  // 「正确答案」文字确实属于那道题（而不是串到别的题去）。
+  win.confirm = () => true;
+  $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const wrongPlan = fillAllWrong();
+  is(wrongPlan.length === 50, '已把 50 题全部答错（实际 ' + wrongPlan.length + '）');
+  $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
+
+  const allM = JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}');
+  is(Object.keys(allM).length === 50, '错题本记录了 50 条（实际 ' + Object.keys(allM).length + '）');
+  is($('revBadge').textContent === '50', '角标显示 50（实际 ' + $('revBadge').textContent + '）');
+
+  // 逐条核对：错题本里每条记录的 answerText 必须与对应题目的真实答案一致
+  let ansBad = 0, partCount = { A: 0, B: 0, C: 0, D: 0 };
+  Object.keys(allM).forEach((k) => {
+    const rec = allM[k];
+    partCount[rec.part] = (partCount[rec.part] || 0) + 1;
+    if (!rec.answerText) { ansBad++; console.log('     ✗ ' + k + ' 缺 answerText'); return; }
+    if (!rec.lastPickText) { ansBad++; console.log('     ✗ ' + k + ' 缺 lastPickText'); return; }
+    // C 部分是单词，answerText 就是那个词
+    if (rec.part === 'C') {
+      const c = C.items.find((x) => x.text + '@@' + x.answer === k);
+      if (!c) { ansBad++; console.log('     ✗ ' + k + ' 在 Part C 里找不到对应题'); return; }
+      if (rec.answerText !== c.answer) { ansBad++; console.log('     ✗ ' + k + ' 答案不符: ' + rec.answerText); }
+      return;
+    }
+    if (rec.part === 'D') {
+      const d = D.items.find((x) => (x.lookup || x.word) === k);
+      const ch = d && d.choices.find((c) => c.k === d.answer);
+      if (!ch || rec.answerText !== d.answer + '. ' + ch.t) {
+        ansBad++; console.log('     ✗ ' + k + ' 答案文字不对: ' + rec.answerText);
+      }
+      return;
+    }
+    if (rec.part === 'B') {
+      const b = B.items.find((x) => x.a + '|' + x.b === k);
+      const want = b.answer === 'S' ? '同义 Synonyms' : '反义 Antonyms';
+      if (!b || rec.answerText.indexOf(want.split(' ')[0]) < 0) {
+        ansBad++; console.log('     ✗ ' + k + ' 答案文字不对: ' + rec.answerText);
+      }
+      return;
+    }
+    if (rec.part === 'A') {
+      const a = A.items.find((x) => x.word === k);
+      const wantText = aChoiceText[a.answer];
+      if (!a || rec.answerText.indexOf(wantText) < 0) {
+        ansBad++; console.log('     ✗ ' + k + ' 答案文字不对(应含"' + wantText + '"): ' + rec.answerText);
+      }
+    }
+  });
+  is(ansBad === 0, '50 条错题记录的正确答案文字全部对得上（错误 ' + ansBad + ' 条）');
+  console.log('     各 Part 记录数: A=' + partCount.A + ' B=' + partCount.B +
+    ' C=' + partCount.C + ' D=' + partCount.D);
+
+  console.log('\n=== 6b. 错题页与报告也要显示可读文字 ===');
+  switchTo('review');
+  is($('revCount').textContent === '50', '错题页显示 50（实际 ' + $('revCount').textContent + '）');
+  const revHtml = $('reviewList').textContent;
+  is(revHtml.indexOf('你选了：zzz-not-a-word') < 0 || revHtml.indexOf('你选了：') >= 0,
+     '错题卡片显示「你选了」的可读文字');
+  is(revHtml.indexOf('undefined') < 0, '错题页没有 undefined');
+  $('btnExport').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const rep = $('reportText').value;
+  is(rep.indexOf('undefined') < 0, '报告里没有 undefined');
+  is(rep.indexOf('[50]') >= 0, '报告列出了 50 条');
+  is(rep.indexOf('我选了: zzz-not-a-word') >= 0, '报告里 Part C 的错选是原文而不是空');
+
+  console.log('\n=== 6c. 重测 50 题全部答对 → 错题本清空 ===');
+  win.confirm = () => true;
+  switchTo('quiz');
+  $('btnRetest').dispatchEvent(new win.Event('click', { bubbles: true }));
+  is($('quizBody').querySelectorAll('.arow').length === 20, '重测包含 20 道 Part A');
+  is($('quizBody').querySelectorAll('input[type=radio]').length === 60, '重测包含 B/D 全部单选');
+  is($('quizBody').querySelectorAll('input[type=text]').length === 10, '重测包含 10 道 Part C');
+  const filled = fillCorrect();
+  is(filled === 50, '重测中填对 50 题（实际 ' + filled + '）');
+  $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const afterM = JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}');
+  is(Object.keys(afterM).length === 0, '全部答对后错题本清空（实际 ' + Object.keys(afterM).length + '）');
+
+
+  console.log('\n=== 6d. 全对一题不错 → 错题本保持空 ===');
+  win.confirm = () => true;
   $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
   fillCorrect();
   $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
-  is(JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}') &&
-     Object.keys(JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}')).length === 0,
+  is(Object.keys(JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}')).length === 0,
      '全对时错题本为空');
   is($('revBadge').classList.contains('hidden'), '导航错题角标隐藏');
   is($('btnRetest').style.display === 'none', '首屏「重测错题」按钮隐藏');

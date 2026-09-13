@@ -579,7 +579,8 @@
           html += '</div>';
           if (quiz.submitted) {
             var selText = null;
-            it.choices.forEach(function (c) { if (c.key === sel) selText = c.k + '. ' + c.t; });
+            // 注意：Part B/D 的选项是 { k, t } 形状，不能用 c.key（会永远匹配不到）
+            it.choices.forEach(function (c) { if (c.k === sel) selText = c.k + '. ' + c.t; });
             html += explainHtml(it, sel, it.answer, selText);
           }
         });
@@ -840,6 +841,16 @@
     return String(it.answer);
   }
 
+  /* 取某题「我选了什么」的可读文字 */
+  function pickTextOf(it, v) {
+    if (v == null || v === '') return '';
+    if (it.choices) {
+      var hit = it.choices.filter(function (c) { return c.k === v; })[0];
+      return hit ? (hit.k + '. ' + hit.t) : String(v);
+    }
+    return String(v);
+  }
+
   /* 把一次提交的结果并入错题本。
      只处理**真正作答了的**题：
        答对 → 从错题本移除（视为已掌握）
@@ -867,6 +878,7 @@
           added++;
         }
         m[key].lastPick = v;                 // 回看这次错选了什么
+        m[key].lastPickText = pickTextOf(it, v); // 错选的可读文字
         m[key].answerText = answerTextOf(it); // 记录时的正确答案文字
         m[key].lastQuestion = it.text || it.word ||
           (it.a ? (it.a + ' vs ' + it.b) : '');
@@ -980,7 +992,8 @@
       if (d.sub) html += '<div class="row dim2">' + esc(d.sub) + '</div>';
       html += '<div class="row">' + esc(d.prompt) + '</div>';
       if (rec.lastPick) {
-        html += '<div class="row">你选了：<b class="bad">' + esc(rec.lastPick) + '</b>' +
+        html += '<div class="row">你选了：<b class="bad">' +
+          esc(rec.lastPickText || rec.lastPick) + '</b>' +
           ' · 正确答案：<b class="good">' + esc(d.answerText) + '</b></div>';
       } else {
         html += '<div class="row">正确答案：<b class="good">' + esc(d.answerText) + '</b></div>';
@@ -1114,7 +1127,7 @@
       L.push('[' + (i + 1) + '] ' + d.title + '   （' + d.kind + '，错 ' + rec.wrongCount + ' 次）');
       if (d.sub) L.push('    释义: ' + d.sub);
       L.push('    题目: ' + d.prompt);
-      if (rec.lastPick) L.push('    我选了: ' + rec.lastPick + '  ← 错的');
+      if (rec.lastPick) L.push('    我选了: ' + (rec.lastPickText || rec.lastPick) + '  ← 错的');
       L.push('    正确答案: ' + d.answerText);
       if (d.reason) L.push('    原书解析: ' + d.reason);
     });
