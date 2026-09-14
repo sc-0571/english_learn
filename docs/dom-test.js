@@ -533,13 +533,25 @@ const errors = [];
   const cardsOf = () => grid.querySelectorAll('.cardx');
   is(cardsOf().length === 10, '一屏显示 10 张卡（实际 ' + cardsOf().length + '）');
   is(grid.classList.contains('fcgrid'), '用的是网格容器 .fcgrid');
-  // 每张卡都有正反两面，正面是单词、背面是释义
+  // 每张卡都有正反两面，正面**只有英文**、背面才有中文释义
   const c0 = cardsOf()[0];
   is(c0.querySelectorAll('.face').length === 2, '每张卡有正反两面');
   is(!!c0.querySelector('.f-front .w') && c0.querySelector('.f-front .w').textContent.trim().length > 0,
      '正面显示单词: ' + c0.querySelector('.f-front .w').textContent.trim());
+  // 正面不能泄露答案：不能有中文、不能有英文释义
+  const cjk = /[\u4e00-\u9fff]/;
+  const frontLeak = [];
+  Array.from(cardsOf()).forEach((c, i) => {
+    const t = c.querySelector('.f-front').textContent;
+    if (cjk.test(t)) frontLeak.push((i + 1) + ':' + t.trim().slice(0, 20));
+  });
+  is(frontLeak.length === 0, '正面没有任何中文（泄露 ' + frontLeak.length + ' 张' +
+     (frontLeak.length ? ': ' + frontLeak.slice(0, 3).join(' | ') : '') + '）');
+  is(c0.querySelector('.f-front .def') === null, '正面没有英文释义');
+  is(c0.querySelector('.f-front .zh-mini') === null, '正面没有中文提示元素');
   is(c0.querySelector('.f-back .def').textContent.trim().length > 10, '背面有英文释义');
   is(c0.querySelector('.f-back .zh').textContent.trim().length > 0, '背面有中文释义');
+  is(cjk.test(c0.querySelector('.f-back .zh').textContent), '背面的中文确实是中文');
   const posBefore = $('fcPos').textContent;
   is(/第 1–10 \/ 50/.test(posBefore), '页码显示「第 1–10 / 50」（实际 ' + posBefore + '）');
 

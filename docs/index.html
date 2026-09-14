@@ -180,10 +180,8 @@
   }
   .cardx .f-front{align-items:center;justify-content:center;text-align:center}
   .cardx .f-back{transform:rotateY(180deg)}
-  .cardx .w{font-size:15px;font-weight:700;line-height:1.2;letter-spacing:.2px;word-break:break-word}
-  .cardx .ip{color:var(--acc);font-size:10.5px;margin-top:3px;line-height:1.3;word-break:break-word}
-  .cardx .zh-mini{color:var(--dim);font-size:11.5px;margin-top:5px;line-height:1.35;
-                  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .cardx .w{font-size:17px;font-weight:700;line-height:1.2;letter-spacing:.2px;word-break:break-word}
+  .cardx .ip{color:var(--acc);font-size:11px;margin-top:5px;line-height:1.3;word-break:break-word}
   .cardx .f-back .zh{font-size:12.5px;font-weight:650;line-height:1.3;
                      display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .cardx .f-back .def{font-size:10.5px;color:var(--dim);margin-top:4px;line-height:1.35;flex:1;
@@ -1328,7 +1326,6 @@
           '<div class="face f-front">' +
             '<div class="w">' + esc(w.word) + '</div>' +
             (w.ipa ? '<div class="ip">/' + esc(w.ipa) + '/</div>' : '') +
-            '<div class="zh-mini">' + esc(w.zh) + '</div>' +
           '</div>' +
           '<div class="face f-back">' +
             '<div class="zh">' + esc(w.zh) + '</div>' +
