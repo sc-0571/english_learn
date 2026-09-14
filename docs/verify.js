@@ -1,5 +1,5 @@
 /* 数据自检：验证 data.js 的题库是否与原书答案一致、结构是否完整。
-   运行： node web/verify.js                                          */
+   运行： node docs/verify.js                                         */
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
@@ -168,7 +168,7 @@ const avail = VA_LEVELS.filter(l => l.available).map(l => l.level);
 console.log(`     已实现: Level ${avail.join(', ')}；其余待补`);
 
 console.log('\n=== 9. 错题本用的 matchKey 必须唯一 ===');
-// 与 web/index.html 的 matchKeyOf 保持一致；重复会导致错题记录互相覆盖
+// 与 docs/index.html 的 matchKeyOf 保持一致；重复会导致错题记录互相覆盖
 const mk = {
   A: it => it.word,
   B: it => it.a + '|' + it.b,

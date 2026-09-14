@@ -38,11 +38,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-alias.ps1
 
 | 路径 | 说明 |
 |---|---|
-| `index.html` | 网页入口（跳转到 `web/index.html`） |
-| `web/` | **Verbal Advantage 词汇自测网页**（纯静态，详见 `web/README.md`） |
+| `docs/index.html` | **Verbal Advantage 词汇自测网页**（纯静态，详见 `docs/README.md`） |
+| `index.html` | 网页入口（跳转到 `docs/index.html`） |
 | `level1-quiz.md` | Level 1 的 50 道题（Markdown 版，含答案解析） |
 | `backup.ps1` | 备份脚本 |
 | `scripts/install-alias.ps1` | 安装 `git backup` 别名 |
 
-网页部分完全离线可用：直接双击 `index.html` 即可，不需要服务器或联网。
-要发布到 GitHub Pages：**Settings → Pages → Deploy from a branch → `main` / `(root)`**。
+## 在线使用
+
+<https://sc-0571.github.io/english_learn/>
+
+仓库为 public，GitHub Pages 从 `main` 分支的 `/docs` 目录发布。
+也可以直接双击本地的 `index.html`，完全离线可用，不需要服务器或联网。

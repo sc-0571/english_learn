@@ -1,6 +1,6 @@
 /* DOM 冒烟测试：用 jsdom 真正加载 index.html，验证交互与判分逻辑。
-   运行： node web/dom-test.js
-   需要 web/node_modules/jsdom（已用 npm 本地安装，未提交到仓库）。 */
+   运行： node docs/dom-test.js
+   需要 docs/node_modules/jsdom（用 npm --no-save 本地安装，不提交到仓库）。 */
 const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
