@@ -162,28 +162,45 @@
   .chip{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:5px 11px;font-size:13px}
   .chip b{color:var(--acc)}
 
-  /* ---------- flashcards ---------- */
-  .fc-stage{perspective:1200px;margin:18px 0}
-  .fc{
-    position:relative;min-height:250px;cursor:pointer;
-    transform-style:preserve-3d;transition:transform .5s cubic-bezier(.4,.2,.2,1);
+  /* ---------- flashcards（2×5 网格，一屏 10 张） ---------- */
+  .fcbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:10px 0 4px;font-size:13px;color:var(--dim)}
+  .fcbar .chk{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--txt)}
+  .fcbar .chk input{accent-color:var(--acc)}
+  .fcgrid{
+    display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;
+    perspective:1600px;margin:14px 0;
   }
-  .fc.flip{transform:rotateY(180deg)}
-  .fc .face{
+  .cardx{position:relative;height:132px;cursor:pointer;transform-style:preserve-3d;
+         transition:transform .45s cubic-bezier(.4,.2,.2,1)}
+  .cardx.flip{transform:rotateY(180deg)}
+  .cardx .face{
     position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;
-    background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
-    padding:26px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;
+    background:var(--panel);border:1px solid var(--line);border-radius:11px;
+    padding:9px 10px;display:flex;flex-direction:column;overflow:hidden;
   }
-  .fc .back{transform:rotateY(180deg);align-items:stretch;text-align:left;justify-content:flex-start;overflow:auto}
-  .fc .front .word{font-size:31px;font-weight:750;letter-spacing:.3px}
-  .fc .front .ipa{color:var(--acc);font-size:14px;margin-top:7px}
-  .fc .front .pos{color:var(--dim2);font-size:12.5px;margin-top:3px}
-  .fc .front .tap{position:absolute;bottom:14px;font-size:12px;color:var(--dim2)}
-  .fc .back .zh{font-size:21px;font-weight:650;margin-bottom:9px}
-  .fc .back .def{font-size:14.5px;margin-bottom:9px}
-  .fc .back .kv{font-size:13.5px;margin:3px 0}
-  .fc .back .kv b{color:var(--dim);font-weight:600}
-  .fc .back .note{font-size:12.5px;color:var(--warn);margin-top:9px;line-height:1.5}
+  .cardx .f-front{align-items:center;justify-content:center;text-align:center}
+  .cardx .f-back{transform:rotateY(180deg)}
+  .cardx .w{font-size:15px;font-weight:700;line-height:1.2;letter-spacing:.2px;word-break:break-word}
+  .cardx .ip{color:var(--acc);font-size:10.5px;margin-top:3px;line-height:1.3;word-break:break-word}
+  .cardx .zh-mini{color:var(--dim);font-size:11.5px;margin-top:5px;line-height:1.35;
+                  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .cardx .f-back .zh{font-size:12.5px;font-weight:650;line-height:1.3;
+                     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .cardx .f-back .def{font-size:10.5px;color:var(--dim);margin-top:4px;line-height:1.35;flex:1;
+                      display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+  .cardx .f-back .tags{font-size:10px;color:var(--dim2);margin-top:3px;
+                       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cardx .fcbtn{
+    margin-top:5px;font-family:inherit;font-size:10.5px;font-weight:650;cursor:pointer;
+    padding:3px 8px;border-radius:7px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--txt);
+  }
+  .cardx .fcbtn:hover{border-color:var(--ok);color:var(--ok)}
+  .cardx.known{border-color:var(--ok)}
+  .cardx.known .face{border-color:var(--ok)}
+  .cardx .kn{
+    position:absolute;top:6px;right:7px;z-index:3;font-size:11px;color:var(--ok);font-weight:750;
+  }
 
   /* ---------- wordlist ---------- */
   .wl{display:grid;grid-template-columns:1fr 1fr;gap:9px}
@@ -193,10 +210,14 @@
   .wl .body{font-size:13px;color:var(--dim);margin-top:8px;line-height:1.6}
   .wl .body .l{color:var(--txt)}
   .search{display:flex;gap:9px;margin-bottom:12px}
+  @media(max-width:980px){
+    .fcgrid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  }
   @media(max-width:640px){
     .wl{grid-template-columns:1fr}
     .arow{grid-template-columns:100px 1fr}
-    .fc .front .word{font-size:25px}
+    .fcgrid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .cardx{height:124px}
   }
   footer{margin-top:28px;color:var(--dim2);font-size:12px;text-align:center;line-height:1.8}
   footer a{color:var(--dim)}
@@ -285,28 +306,27 @@
   <section id="tab-cards" class="hidden">
     <div class="card">
       <h2>单词卡</h2>
-      <p class="muted">点卡片翻面。可标记「已掌握」，标记过的词会被跳过。</p>
-      <div class="breakdown" style="margin-top:10px">
+      <div class="fcbar">
+        <label class="chk"><input type="checkbox" id="fcUnmastered" checked> 只练未掌握</label>
+        <span class="dim2">每张点一下翻面 · 翻面后可标「已掌握」</span>
+        <select id="fcSize" aria-label="每屏数量" style="width:auto;padding:5px 9px;font-size:13px">
+          <option value="2">2 行</option>
+          <option value="4">4 行</option>
+          <option value="6">6 行</option>
+        </select>
+      </div>
+      <div class="breakdown">
         <span class="chip">已掌握 <b id="fcKnown">0</b>/<b id="fcTotal">50</b></span>
-        <span class="chip" id="fcPos">1 / 50</span>
+        <span class="chip" id="fcPos">0 / 0</span>
       </div>
     </div>
-    <div class="fc-stage">
-      <div class="fc" id="fc">
-        <div class="face front">
-          <div class="word" id="fcWord">—</div>
-          <div class="ipa" id="fcIpa"></div>
-          <div class="pos" id="fcPos2"></div>
-          <div class="tap">点击卡片翻面</div>
-        </div>
-        <div class="face back" id="fcBack"></div>
-      </div>
-    </div>
+    <div class="fcgrid" id="fcGrid"></div>
     <div class="btns">
-      <button class="btn ghost" id="fcPrev">← 上一个</button>
-      <button class="btn primary" id="fcKnow">✓ 已掌握，下一个</button>
-      <button class="btn ghost" id="fcNext">下一个 →</button>
-      <button class="btn ghost" id="fcReset">重置进度</button>
+      <button class="btn primary" id="fcPrev">← 上一屏</button>
+      <button class="btn ghost" id="fcAllFlip">全部翻面</button>
+      <button class="btn primary" id="fcNext">下一屏 →</button>
+      <button class="btn ghost" id="fcHard">本屏标为未掌握</button>
+      <button class="btn ghost" id="fcReset">重置全部进度</button>
     </div>
   </section>
 
@@ -388,7 +408,6 @@
     if ($('wlSearch')) $('wlSearch').value = '';
     levelUi();
     fcState.known = load(kKnown(), {});
-    buildFcOrder();
     renderList('');
     refreshResume();
     // 回到测验页，清掉上一级的作答
@@ -928,7 +947,7 @@
       x.classList.toggle('on', x.dataset.tab === name);
     });
     TAB_IDS.forEach(function (t) { $('tab-' + t).classList.toggle('hidden', t !== name); });
-    if (name === 'cards') renderCard();
+    if (name === 'cards') renderGrid();
     if (name === 'review') renderReview();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -1254,56 +1273,160 @@
 
   $('btnStart').addEventListener('click', function () { startQuiz(); });
 
-  /* ---------------- flashcards ---------------- */
-  var fcState = { order: [], idx: 0, known: {} };
+  /* ---------------- flashcards（2×5 网格，一屏 10 张） ----------------
+     fcState.order 是「本屏锁定的顺序」——翻面/标记不会让卡片乱跳；
+     切屏（上/下一屏）或改变筛选条件时才重新构建。 */
+  var fcState = { order: [], idx: 0, known: {}, flipped: {}, rows: 2, turn: 0 };
 
-  function buildFcOrder() {
-    // 只练还没标记「已掌握」的词；全部掌握后回到整册重刷
-    var un = WORDS.filter(function (w) { return !fcState.known[w.word]; });
-    fcState.order = shuffle(un.length ? un : WORDS);
+  var fcCols = 5;                                  // 桌面端固定 5 列 → 2 行 = 10 张
+  function fcPageSize() { return fcCols * fcState.rows; }
+  function fcFiltered() {
+    return $('fcUnmastered').checked
+      ? WORDS.filter(function (w) { return !fcState.known[w.word]; })
+      : WORDS.slice();
+  }
+  /* 重建本屏顺序。keepFirst = 尽量让某张卡出现在开头（标记已掌握后用） */
+  function buildFcOrder(keepFirst) {
+    var list = fcFiltered();
+    if (!list.length) { fcState.order = []; fcState.idx = 0; return; }
+    var rest = list;
+    if (keepFirst) {
+      var i = rest.map(function (w) { return w.word; }).indexOf(keepFirst);
+      if (i >= 0) rest = rest.slice(i).concat(rest.slice(0, i));
+    }
+    fcState.order = rest;
     fcState.idx = 0;
+    fcState.flipped = {};
   }
   function knownCount() {
     return WORDS.filter(function (w) { return fcState.known[w.word]; }).length;
   }
-  function renderCard() {
-    if (!fcState.order.length) buildFcOrder();
-    var w = fcState.order[fcState.idx];
-    if (!w) return;
-    var fc = $('fc');
-    fc.classList.remove('flip');
-    $('fcWord').textContent = w.word;
-    $('fcIpa').textContent = w.ipa ? '/' + w.ipa + '/' : '';
-    $('fcPos2').textContent = w.pos || '';
-    var b = '<div class="zh">' + esc(w.zh) + '</div>';
-    b += '<div class="def">' + esc(w.def) + '</div>';
-    if (w.syn && w.syn.length) b += '<div class="kv"><b>近义：</b>' + esc(w.syn.join(', ')) + '</div>';
-    if (w.ant && w.ant.length) b += '<div class="kv"><b>反义：</b>' + esc(w.ant.join(', ')) + '</div>';
-    if (w.note) b += '<div class="note">⚠ ' + esc(w.note) + '</div>';
-    $('fcBack').innerHTML = b;
+  function fcPageWords() {
+    return fcState.order.slice(fcState.idx, fcState.idx + fcPageSize());
+  }
+
+  function renderGrid() {
+    if (!fcState.order.length && fcFiltered().length) buildFcOrder();
+    var page = fcPageWords();
+    var host = $('fcGrid');
+    if (!page.length) {
+      host.innerHTML = '<div class="card empty" style="grid-column:1/-1">' +
+        '这一级的 50 个词都标记为「已掌握」了 🎉<br>' +
+        '<span class="dim2">取消勾选上面的「只练未掌握」可以重新翻看全部。</span></div>';
+      $('fcPos').textContent = '0 / 0';
+    } else {
+      var html = '';
+      page.forEach(function (w) {
+        var w2 = w.word.replace(/"/g, '&quot;');
+        var kn = !!fcState.known[w.word];
+        var tags = [];
+        if (w.syn && w.syn.length) tags.push('近 ' + w.syn.slice(0, 3).join('/'));
+        if (w.ant && w.ant.length) tags.push('反 ' + w.ant.slice(0, 3).join('/'));
+        html += '<div class="cardx' + (fcState.flipped[w.word] ? ' flip' : '') +
+          (kn ? ' known' : '') + '" data-w="' + w2 + '">' +
+          (kn ? '<div class="kn">✓</div>' : '') +
+          '<div class="face f-front">' +
+            '<div class="w">' + esc(w.word) + '</div>' +
+            (w.ipa ? '<div class="ip">/' + esc(w.ipa) + '/</div>' : '') +
+            '<div class="zh-mini">' + esc(w.zh) + '</div>' +
+          '</div>' +
+          '<div class="face f-back">' +
+            '<div class="zh">' + esc(w.zh) + '</div>' +
+            '<div class="def">' + esc(w.def) + '</div>' +
+            (tags.length ? '<div class="tags">' + esc(tags.join(' · ')) + '</div>' : '') +
+            '<button class="fcbtn" data-act="know">' +
+              (kn ? '↺ 取消已掌握' : '✓ 已掌握') + '</button>' +
+          '</div>' +
+        '</div>';
+      });
+      host.innerHTML = html;
+      $('fcPos').textContent = '第 ' + (fcState.idx + 1) + '–' +
+        (fcState.idx + page.length) + ' / ' + fcState.order.length;
+    }
     $('fcKnown').textContent = knownCount();
     $('fcTotal').textContent = WORDS.length;
-    $('fcPos').textContent = (fcState.idx + 1) + ' / ' + fcState.order.length;
+    var allFlipped = page.length > 0 && page.every(function (w) { return fcState.flipped[w.word]; });
+    if ($('fcAllFlip')) $('fcAllFlip').textContent = allFlipped ? '收起全部' : '全部翻面';
   }
-  $('fc').addEventListener('click', function () { this.classList.toggle('flip'); });
-  $('fcNext').addEventListener('click', function () {
-    if (!fcState.order.length) return;
-    fcState.idx = (fcState.idx + 1) % fcState.order.length; renderCard();
+
+  /* 卡内点击：翻面 / 标记已掌握 */
+  $('fcGrid').addEventListener('click', function (e) {
+    var card = e.target.closest ? e.target.closest('.cardx') : null;
+    if (!card) return;
+    var word = card.getAttribute('data-w');
+    var act = e.target.getAttribute && e.target.getAttribute('data-act');
+    if (act === 'know') {
+      if (fcState.known[word]) delete fcState.known[word];
+      else fcState.known[word] = 1;
+      save(kKnown(), fcState.known);
+      // 只练未掌握时，标记后该词会从列表消失：保持当前屏从这张卡开始，避免"跳页"
+      if ($('fcUnmastered').checked && fcState.known[word]) {
+        buildFcOrder(word);
+      }
+      renderGrid();
+      return;
+    }
+    fcState.flipped[word] = !fcState.flipped[word];
+    card.classList.toggle('flip', fcState.flipped[word]);
+    renderGrid();
   });
-  $('fcPrev').addEventListener('click', function () {
+
+  /* 翻页 */
+  function fcGo(delta) {
     if (!fcState.order.length) return;
-    fcState.idx = (fcState.idx - 1 + fcState.order.length) % fcState.order.length; renderCard();
+    var size = fcPageSize();
+    var pages = Math.max(1, Math.ceil(fcState.order.length / size));
+    var cur = Math.floor(fcState.idx / size);
+    cur = (cur + delta + pages) % pages;
+    fcState.idx = cur * size;
+    fcState.flipped = {};
+    renderGrid();
+  }
+  $('fcNext').addEventListener('click', function () { fcGo(1); });
+  $('fcPrev').addEventListener('click', function () { fcGo(-1); });
+  $('fcAllFlip').addEventListener('click', function () {
+    var page = fcPageWords();
+    var allFlipped = page.length && page.every(function (w) { return fcState.flipped[w.word]; });
+    page.forEach(function (w) { fcState.flipped[w.word] = !allFlipped; });
+    renderGrid();
   });
-  $('fcKnow').addEventListener('click', function () {
-    var w = fcState.order[fcState.idx];
-    if (w) { fcState.known[w.word] = 1; save(kKnown(), fcState.known); }
-    // 从队列中移除已掌握的词，停留在同一位置即下一个
-    buildFcOrder();
-    renderCard();
+  /* 本屏一次标为未掌握（用来快速把一批词重新练） */
+  $('fcHard').addEventListener('click', function () {
+    var page = fcPageWords();
+    if (!page.length) return;
+    page.forEach(function (w) { delete fcState.known[w.word]; });
+    save(kKnown(), fcState.known);
+    if ($('fcUnmastered').checked) buildFcOrder();
+    renderGrid();
   });
   $('fcReset').addEventListener('click', function () {
-    fcState.known = {}; save(kKnown(), {}); buildFcOrder(); renderCard();
+    showModal({
+      title: '重置全部单词卡进度？',
+      message: '会把 Level ' + CUR + ' 的「已掌握」标记全部清空，共 ' + knownCount() + ' 个词。',
+      buttons: [
+        { label: '取消' },
+        {
+          label: '确定重置', primary: true, onClick: function () {
+            fcState.known = {}; save(kKnown(), {});
+            buildFcOrder(); renderGrid();
+          }
+        }
+      ]
+    });
   });
+  $('fcUnmastered').addEventListener('change', function () { buildFcOrder(); renderGrid(); });
+  $('fcSize').addEventListener('change', function () {
+    fcState.rows = parseInt(this.value, 10) || 2;
+    fcState.idx = 0; fcState.flipped = {};
+    renderGrid();
+  });
+
+  /* 供 applyLevel / 初始化调用 */
+  function initCards() {
+    fcState.rows = parseInt($('fcSize').value, 10) || 2;
+    buildFcOrder();
+    renderGrid();
+  }
 
   /* ---------------- word list ---------------- */
   function renderList(q) {
@@ -1445,6 +1568,7 @@
   var savedLv = parseInt(load('va.curLevel', 1), 10);
   if (AVAIL.indexOf(savedLv) < 0) savedLv = AVAIL[0] || 1;
   applyLevel(savedLv);
+  if (typeof initCards === 'function') initCards();   // 单词卡网格
   switchTab('quiz');
 })();
 </script>

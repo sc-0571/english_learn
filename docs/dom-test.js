@@ -526,19 +526,74 @@ const errors = [];
   is(!!modal(), '空错题本时点重测会给出提示');
   clickModal('好');
 
-  console.log('\n=== 12. 单词卡 ===');
+  console.log('\n=== 12. 单词卡：2×5 网格，一屏 10 张 ===');
   switchTo('cards');
   is(!$('tab-cards').classList.contains('hidden'), '切到单词卡 tab');
-  const fcWord = $('fcWord').textContent;
-  is(fcWord && fcWord !== '—', '卡片正面显示单词: ' + fcWord);
-  $('fc').dispatchEvent(new win.Event('click', { bubbles: true }));
-  is($('fc').classList.contains('flip'), '点击后卡片翻面');
-  is($('fcBack').textContent.length > 10, '背面有释义内容');
+  const grid = $('fcGrid');
+  const cardsOf = () => grid.querySelectorAll('.cardx');
+  is(cardsOf().length === 10, '一屏显示 10 张卡（实际 ' + cardsOf().length + '）');
+  is(grid.classList.contains('fcgrid'), '用的是网格容器 .fcgrid');
+  // 每张卡都有正反两面，正面是单词、背面是释义
+  const c0 = cardsOf()[0];
+  is(c0.querySelectorAll('.face').length === 2, '每张卡有正反两面');
+  is(!!c0.querySelector('.f-front .w') && c0.querySelector('.f-front .w').textContent.trim().length > 0,
+     '正面显示单词: ' + c0.querySelector('.f-front .w').textContent.trim());
+  is(c0.querySelector('.f-back .def').textContent.trim().length > 10, '背面有英文释义');
+  is(c0.querySelector('.f-back .zh').textContent.trim().length > 0, '背面有中文释义');
   const posBefore = $('fcPos').textContent;
-  $('fcNext').dispatchEvent(new win.Event('click', { bubbles: true }));
-  is($('fcPos').textContent !== posBefore, '「下一个」切换了卡片');
-  $('fcKnow').dispatchEvent(new win.Event('click', { bubbles: true }));
+  is(/第 1–10 \/ 50/.test(posBefore), '页码显示「第 1–10 / 50」（实际 ' + posBefore + '）');
+
+  // 点卡片翻面（注意：点的是卡片本体，不是里面的按钮）
+  const front0 = c0.querySelector('.f-front');
+  front0.dispatchEvent(new win.Event('click', { bubbles: true }));
+  is(cardsOf()[0].classList.contains('flip'), '点第一张后它翻面了');
+  is(!cardsOf()[1].classList.contains('flip'), '其它卡片不受影响（只有点到的那张翻）');
+  // 再点一次翻回
+  cardsOf()[0].querySelector('.f-back').dispatchEvent(new win.Event('click', { bubbles: true }));
+  is(!cardsOf()[0].classList.contains('flip'), '再点一次翻回去');
+
+  // 「全部翻面」
+  $('fcAllFlip').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const flippedN = Array.from(cardsOf()).filter((c) => c.classList.contains('flip')).length;
+  is(flippedN === 10, '「全部翻面」把本屏 10 张全翻了（实际 ' + flippedN + '）');
+  is($('fcAllFlip').textContent === '收起全部', '按钮文字变成「收起全部」');
+  $('fcAllFlip').dispatchEvent(new win.Event('click', { bubbles: true }));
+  is(Array.from(cardsOf()).filter((c) => c.classList.contains('flip')).length === 0, '再点一次全部收起');
+
+  // 卡内「已掌握」
+  const knowBtn = cardsOf()[0].querySelector('[data-act="know"]');
+  is(!!knowBtn, '每张卡背面有「已掌握」按钮');
+  const firstWordName = cardsOf()[0].getAttribute('data-w');
+  knowBtn.dispatchEvent(new win.Event('click', { bubbles: true }));
   is($('fcKnown').textContent === '1', '「已掌握」计数变为 1（实际 ' + $('fcKnown').textContent + '）');
+  is(Object.keys(JSON.parse(win.localStorage.getItem('va.l1.known') || '{}')).length === 1,
+     '已掌握状态写进了 localStorage');
+  // 勾着「只练未掌握」时，标记后该词从列表消失 → 仍是 10 张，但不是原来那张
+  is(cardsOf().length === 10, '标记后本屏仍保持 10 张（从剩余词补齐）');
+  is(Array.from(cardsOf()).every((c) => c.getAttribute('data-w') !== firstWordName),
+     '已掌握的词已从「只练未掌握」列表移出');
+
+  console.log('\n=== 12b. 翻页与每屏数量 ===');
+  $('fcNext').dispatchEvent(new win.Event('click', { bubbles: true }));
+  is(/第 11–20 \/ 49/.test($('fcPos').textContent),
+     '「下一屏」跳到 11–20（实际 ' + $('fcPos').textContent + '）');
+  $('fcPrev').dispatchEvent(new win.Event('click', { bubbles: true }));
+  is(/第 1–10 \/ 49/.test($('fcPos').textContent),
+     '「上一屏」回到 1–10（实际 ' + $('fcPos').textContent + '）');
+  // 改成 4 行 → 20 张
+  $('fcSize').value = '4';
+  $('fcSize').dispatchEvent(new win.Event('change', { bubbles: true }));
+  is(cardsOf().length === 20, '切到 4 行后一屏 20 张（实际 ' + cardsOf().length + '）');
+  $('fcSize').value = '2';
+  $('fcSize').dispatchEvent(new win.Event('change', { bubbles: true }));
+  is(cardsOf().length === 10, '切回 2 行后一屏 10 张（实际 ' + cardsOf().length + '）');
+
+  console.log('\n=== 12c. 取消「只练未掌握」→ 能看到全部 ===');
+  $('fcUnmastered').checked = false;
+  $('fcUnmastered').dispatchEvent(new win.Event('change', { bubbles: true }));
+  is(/\/ 50$/.test($('fcPos').textContent),
+     '取消勾选后总数回到 50（实际 ' + $('fcPos').textContent + '）');
+  is(cardsOf().length === 10, '一屏仍是 10 张');
 
   console.log('\n=== 13. 词汇表搜索 ===');
   switchTo('list');
