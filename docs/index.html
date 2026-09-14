@@ -323,7 +323,8 @@
       <button class="btn primary" id="fcPrev">← 上一屏</button>
       <button class="btn ghost" id="fcAllFlip">全部翻面</button>
       <button class="btn primary" id="fcNext">下一屏 →</button>
-      <button class="btn ghost" id="fcHard">本屏标为未掌握</button>
+      <button class="btn" id="fcKnowAll">✓ 本屏全部标为已掌握</button>
+      <button class="btn ghost" id="fcHard">本屏全部标为未掌握</button>
       <button class="btn ghost" id="fcReset">重置全部进度</button>
     </div>
   </section>
@@ -1385,6 +1386,29 @@
     var page = fcPageWords();
     var allFlipped = page.length && page.every(function (w) { return fcState.flipped[w.word]; });
     page.forEach(function (w) { fcState.flipped[w.word] = !allFlipped; });
+    renderGrid();
+  });
+  /* 本屏一次全部标为已掌握（连续点击可快速刷完整册） */
+  $('fcKnowAll').addEventListener('click', function () {
+    var page = fcPageWords();
+    if (!page.length) return;
+    var n = 0;
+    var first = page[0].word;                 // 记住本屏第一个词，用它做锚点翻到下一批
+    page.forEach(function (w) {
+      if (!fcState.known[w.word]) { fcState.known[w.word] = 1; n++; }
+    });
+    save(kKnown(), fcState.known);
+    if (n) {
+      // 勾着「只练未掌握」时：把这批已掌握的折叠掉，从本屏第一个词的位置往下取
+      var list = fcFiltered();
+      var i = list.map(function (w) { return w.word; }).indexOf(first);
+      fcState.order = list;
+      fcState.idx = i >= 0 ? i : 0;
+      if (fcState.idx >= fcState.order.length) {
+        fcState.idx = Math.max(0, Math.floor((fcState.order.length - 1) / fcPageSize()) * fcPageSize());
+      }
+      fcState.flipped = {};
+    }
     renderGrid();
   });
   /* 本屏一次标为未掌握（用来快速把一批词重新练） */

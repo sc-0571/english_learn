@@ -607,6 +607,59 @@ const errors = [];
      '取消勾选后总数回到 50（实际 ' + $('fcPos').textContent + '）');
   is(cardsOf().length === 10, '一屏仍是 10 张');
 
+  console.log('\n=== 12d. 「本屏全部标为已掌握」===');
+  // 先重置，从干净状态开始
+  $('fcUnmastered').checked = true;
+  $('fcUnmastered').dispatchEvent(new win.Event('change', { bubbles: true }));
+  win.localStorage.setItem('va.l1.known', '{}');
+  $('fcReset').dispatchEvent(new win.Event('click', { bubbles: true }));
+  if (modal()) clickModal('确定重置');
+  is($('fcKnown').textContent === '0', '重置后已掌握归零（实际 ' + $('fcKnown').textContent + '）');
+  const pageWordsBefore = Array.from(cardsOf()).map((c) => c.getAttribute('data-w'));
+  is(pageWordsBefore.length === 10, '本屏 10 张');
+
+  $('fcKnowAll').dispatchEvent(new win.Event('click', { bubbles: true }));
+  is($('fcKnown').textContent === '10', '一键后已掌握 = 10（实际 ' + $('fcKnown').textContent + '）');
+  const storedKnown = Object.keys(JSON.parse(win.localStorage.getItem('va.l1.known') || '{}'));
+  is(storedKnown.length === 10, '10 个词写进了 localStorage（实际 ' + storedKnown.length + '）');
+  const allMarked = pageWordsBefore.every((w) => storedKnown.indexOf(w) >= 0);
+  is(allMarked, '本屏原来那 10 个词全部被标记');
+  is(cardsOf().length === 10, '页面自动补上下一批，仍是 10 张');
+  is(/\/ 40$/.test($('fcPos').textContent),
+     '总数从 50 减到 40（实际 ' + $('fcPos').textContent + '）');
+  const overlap = Array.from(cardsOf()).map((c) => c.getAttribute('data-w'))
+    .filter((w) => pageWordsBefore.indexOf(w) >= 0);
+  is(overlap.length === 0, '已掌握的词不再出现在新一批里');
+
+  // 连点 4 次 → 把 50 个词全部标完
+  for (let i = 0; i < 4; i++) $('fcKnowAll').dispatchEvent(new win.Event('click', { bubbles: true }));
+  is($('fcKnown').textContent === '50', '连点后 50 个词全部掌握（实际 ' + $('fcKnown').textContent + '）');
+  is(cardsOf().length === 0, '全部掌握后本屏无卡（实际 ' + cardsOf().length + '）');
+  is($('fcGrid').textContent.indexOf('都标记为「已掌握」') >= 0, '显示空状态提示');
+
+  // 取消「只练未掌握」应能重新看到全部
+  $('fcUnmastered').checked = false;
+  $('fcUnmastered').dispatchEvent(new win.Event('change', { bubbles: true }));
+  is(cardsOf().length === 10 && /\/ 50$/.test($('fcPos').textContent),
+     '取消筛选后又能看到 50 个词（实际 ' + $('fcPos').textContent + '）');
+
+  console.log('\n=== 12e. 「本屏全部标为未掌握」应能撤销 ===');
+  $('fcHard').dispatchEvent(new win.Event('click', { bubbles: true }));
+  is($('fcKnown').textContent === '40',
+     '一键撤销后已掌握 = 40（实际 ' + $('fcKnown').textContent + '）');
+
+  // 收尾：清干净，避免影响后面的用例
+  win.localStorage.setItem('va.l1.known', '{}');
+  $('fcReset').dispatchEvent(new win.Event('click', { bubbles: true }));
+  if (modal()) clickModal('确定重置');
+  is($('fcKnown').textContent === '0', '收尾重置成功');
+
+  $('fcUnmastered').checked = false;
+  $('fcUnmastered').dispatchEvent(new win.Event('change', { bubbles: true }));
+  is(/\/ 50$/.test($('fcPos').textContent),
+     '取消勾选后总数回到 50（实际 ' + $('fcPos').textContent + '）');
+  is(cardsOf().length === 10, '一屏仍是 10 张');
+
   console.log('\n=== 13. 词汇表搜索 ===');
   switchTo('list');
   const search = $('wlSearch');
