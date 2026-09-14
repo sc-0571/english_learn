@@ -69,11 +69,20 @@ const errors = [];
   };
 
   console.log('\n=== 1. 脚本加载与初始化 ===');
-  is(typeof win.VA_WORDS === 'object' && win.VA_WORDS.length > 50, 'data.js 已加载并挂到 window');
+  is(!!win.VA && typeof win.VA.getLevel === 'function', 'data.js 已加载（VA API 存在）');
+  is(win.VA.availableLevels().join(',') === '1,2',
+     '已注册 Level 1 与 Level 2（实际 ' + win.VA.availableLevels().join(',') + '）');
   is(!!$('wl') && $('wl').querySelectorAll('details').length === 50,
      '词汇表渲染出 50 个条目（实际 ' + $('wl').querySelectorAll('details').length + '）');
   is($('srcName').textContent.indexOf('Verbal') >= 0, '页脚数据来源已填充');
   is($('fcTotal').textContent === '50', '单词卡总数显示 50');
+  is($('levelSelect').options.length === 10, '级别下拉框有 10 个选项');
+  is($('levelSelect').value === '1', '默认停在 Level 1');
+
+  // 取当前级别（Level 1）的各级数据，供后面构造答案用
+  let CUR_DEF = win.VA.getLevel(1);
+  let A = CUR_DEF.parts.A, B = CUR_DEF.parts.B, C = CUR_DEF.parts.C, D = CUR_DEF.parts.D;
+  let MATCH = win.VA.matchChoices(1);          // Part A 的 [{key,text,answer}]
 
   console.log('\n=== 2. 开始测验 ===');
   $('btnStart').dispatchEvent(new win.Event('click', { bubbles: true }));
@@ -97,12 +106,33 @@ const errors = [];
   is($('progBar').style.width === '2%', '答 1 题后进度 2%（实际 ' + $('progBar').style.width + '）');
 
   console.log('\n=== 4. 全部答对 → 应得 50/50 ===');
-  // 从页面 DOM 反推正确答案：利用 data.js 的原始答案
-  const A = win.VA_PART_A, B = win.VA_PART_B, C = win.VA_PART_C, D = win.VA_PART_D;
   // Part A 的选项字母在渲染时会被重新映射，所以必须按「释义文字」反查正确选项，
-  // 不能直接用 VA_PART_A 里的字母。
+  // 不能直接用定义里的字母。MATCH 的 key 与 items 索引一一对应。
   const aChoiceText = {};
-  A.choices.forEach((c) => { aChoiceText[c.key] = c.text; });
+  MATCH.forEach((c) => { aChoiceText[c.key] = c.text; });
+  const aAnswerOf = (word) => {
+    const idx = A.items.map((x) => x.word).indexOf(word);
+    return idx < 0 ? null : MATCH[idx];
+  };
+  /* 某一级的 50 个核心词（不含 extra 的释义查询词） */
+  const coreWords = (lv) => win.VA.getLevel(lv || 1).words.filter((w) => !w.extra);
+  /* 错题本的存储键有两层前缀："<level>:<Part>::<裸key>"
+     例如 "1:A::paraphrase"、"1:B::aloof|gregarious"。
+     bareKey() 去掉两层前缀，返回 matchKeyOf 里的「裸 key」；
+     partOf() 取出 Part 字母。用 App 自己的 VA.bareKeyOf 保证解析一致。 */
+  const bareKey = (storeKey) => {
+    const s = win.VA.bareKeyOf(storeKey);          // 去掉级别前缀 → "A::paraphrase"
+    const j = s.indexOf('::');
+    return j >= 0 ? s.slice(j + 2) : s;
+  };
+  const partOf = (storeKey) => {
+    const s = String(storeKey);
+    const c = s.indexOf(':');
+    const t = c >= 0 ? s.slice(c + 1) : s;
+    const j = t.indexOf('::');
+    return j >= 0 ? t.slice(0, j) : '';
+  };
+  const myMistakes = (lv) => JSON.parse(win.localStorage.getItem('va.l' + (lv || 1) + '.mistakes') || '{}');
 
   /* 把当前这套测验全部填上正确答案；exceptMatchKey 指定的 Part A 词跳过。 */
   function fillCorrect(exceptMatchKey) {
@@ -110,9 +140,9 @@ const errors = [];
     Array.prototype.forEach.call($('quizBody').querySelectorAll('select'), (sel) => {
       const word = sel.closest('.arow').querySelector('.aword').textContent.trim();
       if (word === exceptMatchKey) return;
-      const item = A.items.find((x) => x.word === word);
-      if (!item) return;
-      const wantText = aChoiceText[item.answer];
+      const mc = aAnswerOf(word);
+      if (!mc) return;
+      const wantText = mc.text;
       const opt = Array.prototype.slice.call(sel.options)
         .find((o) => o.value && o.textContent.replace(/^[A-Z]\.\s*/, '') === wantText);
       if (!opt) return;
@@ -147,16 +177,16 @@ const errors = [];
     // Part A
     Array.prototype.forEach.call($('quizBody').querySelectorAll('select'), (sel) => {
       const word = sel.closest('.arow').querySelector('.aword').textContent.trim();
-      const item = A.items.find((x) => x.word === word);
-      if (!item) return;
-      const wantText = aChoiceText[item.answer];
+      const mc = aAnswerOf(word);
+      if (!mc) return;
+      const wantText = mc.text;
       const badOpt = Array.prototype.slice.call(sel.options)
         .find((o) => o.value && o.textContent.replace(/^[A-Z]\.\s*/, '') !== wantText);
       if (!badOpt) return;
       sel.value = badOpt.value;
       sel.dispatchEvent(new win.Event('change', { bubbles: true }));
       info.push({ qid: sel.getAttribute('data-qid'), part: 'A', word,
-        expectAnswer: item.answer + '. ' + wantText });
+        expectAnswer: mc.answer + '. ' + wantText });
     });
     // Part B / D
     const byGroup = {};
@@ -197,7 +227,9 @@ const errors = [];
       .find((r) => r.querySelector('.aword').textContent.trim() === matchKey);
     if (!row) return false;
     const sel = row.querySelector('select');
-    const wantText = aChoiceText[A.items.find((x) => x.word === matchKey).answer];
+    const mc = aAnswerOf(matchKey);
+    if (!mc) return false;
+    const wantText = mc.text;
     const bad = Array.prototype.slice.call(sel.options).find((o) =>
       o.value && o.textContent.replace(/^[A-Z]\.\s*/, '') !== wantText);
     if (!bad) return false;
@@ -258,10 +290,12 @@ const errors = [];
   clickModal('交卷');                           // 选「就这样交卷」
   is(!modal(), '点「就这样交卷」后弹窗关闭');
 
-  const sp = JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}');
+  const sp = myMistakes(1);
   is(Object.keys(sp).length === 1,
      '只答错 1 题 → 错题本只有 1 题（实际 ' + Object.keys(sp).length + '）');
-  is(Object.keys(sp)[0] === sparseWord, '记录的正是那一题: ' + Object.keys(sp)[0]);
+  is(bareKey(Object.keys(sp)[0]) === sparseWord, '记录的正是那一题: ' + bareKey(Object.keys(sp)[0]));
+  is(Object.keys(sp)[0] === '1:A::' + sparseWord,
+     '存储键 = 级别前缀 + Part 前缀 + 裸 key（实际 ' + Object.keys(sp)[0] + '）');
   is($('revBadge').textContent === '1', '角标是 1 而不是 50（实际 ' + $('revBadge').textContent + '）');
   is($('quizBody').textContent.indexOf('未作答') >= 0, '结果页标明有题未作答');
   is($('quizBody').textContent.indexOf('不计入错题本') >= 0, '结果页说明未作答不计入错题本');
@@ -273,12 +307,12 @@ const errors = [];
   Object.keys(sp).forEach((k) => {
     const rec = sp[k];
     if (rec.part !== 'A') return;
-    const w = win.VA_BY_WORD[k];
+    const w = win.VA.wordOf(1, bareKey(k));
     if (!w) return;
     const shown = String(rec.answerText || '');
     if (!shown) { mismatch++; console.log('     ✗ ' + k + ' 没存下正确答案文字'); return; }
-    const collides = win.VA_LEVEL1.find((o) =>
-      o.word !== k && o.zh && o.zh.length > 4 &&
+    const collides = coreWords().find((o) =>
+      o.word !== bareKey(k) && o.zh && o.zh.length > 4 &&
       shown.indexOf(o.zh) >= 0 && w.zh.indexOf(o.zh) < 0);
     if (collides) {
       mismatch++;
@@ -311,14 +345,15 @@ const errors = [];
   is(wrongPlan.length === 50, '已把 50 题全部答错（实际 ' + wrongPlan.length + '）');
   $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
 
-  const allM = JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}');
+  const allM = myMistakes(1);
   is(Object.keys(allM).length === 50, '错题本记录了 50 条（实际 ' + Object.keys(allM).length + '）');
   is($('revBadge').textContent === '50', '角标显示 50（实际 ' + $('revBadge').textContent + '）');
 
   // 逐条核对：错题本里每条记录的 answerText 必须与对应题目的真实答案一致
   let ansBad = 0, partCount = { A: 0, B: 0, C: 0, D: 0 };
-  Object.keys(allM).forEach((k) => {
-    const rec = allM[k];
+  Object.keys(allM).forEach((rawKey) => {
+    const rec = allM[rawKey];
+    const k = bareKey(rawKey);                 // 去掉 "1:" 前缀
     partCount[rec.part] = (partCount[rec.part] || 0) + 1;
     if (!rec.answerText) { ansBad++; console.log('     ✗ ' + k + ' 缺 answerText'); return; }
     if (!rec.lastPickText) { ansBad++; console.log('     ✗ ' + k + ' 缺 lastPickText'); return; }
@@ -339,17 +374,18 @@ const errors = [];
     }
     if (rec.part === 'B') {
       const b = B.items.find((x) => x.a + '|' + x.b === k);
+      if (!b) { ansBad++; console.log('     ✗ ' + k + ' 在 Part B 里找不到对应词对'); return; }
       const want = b.answer === 'S' ? '同义 Synonyms' : '反义 Antonyms';
-      if (!b || rec.answerText.indexOf(want.split(' ')[0]) < 0) {
+      if (rec.answerText.indexOf(want.split(' ')[0]) < 0) {
         ansBad++; console.log('     ✗ ' + k + ' 答案文字不对: ' + rec.answerText);
       }
       return;
     }
     if (rec.part === 'A') {
-      const a = A.items.find((x) => x.word === k);
-      const wantText = aChoiceText[a.answer];
-      if (!a || rec.answerText.indexOf(wantText) < 0) {
-        ansBad++; console.log('     ✗ ' + k + ' 答案文字不对(应含"' + wantText + '"): ' + rec.answerText);
+      const mc = aAnswerOf(k);
+      if (!mc) { ansBad++; console.log('     ✗ ' + k + ' 在 Part A 里找不到对应词'); return; }
+      if (rec.answerText.indexOf(mc.text) < 0) {
+        ansBad++; console.log('     ✗ ' + k + ' 答案文字不对(应含"' + mc.text + '"): ' + rec.answerText);
       }
     }
   });
@@ -379,7 +415,7 @@ const errors = [];
   const filled = fillCorrect();
   is(filled === 50, '重测中填对 50 题（实际 ' + filled + '）');
   $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
-  const afterM = JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}');
+  const afterM = myMistakes(1);
   is(Object.keys(afterM).length === 0, '全部答对后错题本清空（实际 ' + Object.keys(afterM).length + '）');
 
 
@@ -387,7 +423,7 @@ const errors = [];
   $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
   fillCorrect();
   $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
-  is(Object.keys(JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}')).length === 0,
+  is(Object.keys(myMistakes(1)).length === 0,
      '全对时错题本为空');
   is($('revBadge').classList.contains('hidden'), '导航错题角标隐藏');
   is($('btnRetest').style.display === 'none', '首屏「重测错题」按钮隐藏');
@@ -406,13 +442,15 @@ const errors = [];
   is(badRow.nextElementSibling.classList.contains('exp') &&
      badRow.nextElementSibling.classList.contains('bad'), '错题解析块标红');
 
-  let mst = JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}');
+  let mst = myMistakes(1);
+  const mk = () => mst['1:A::' + wrongWord];
   is(Object.keys(mst).length === 1, '错题本正好 1 题（实际 ' + Object.keys(mst).length + '：' +
      Object.keys(mst).join(',') + '）');
-  is(Object.keys(mst)[0] === wrongWord, '记录的正是答错的词: ' + Object.keys(mst)[0]);
-  is(mst[wrongWord].part === 'A', 'part = A（实际 ' + mst[wrongWord].part + '）');
-  is(mst[wrongWord].wrongCount === 1, 'wrongCount = 1');
-  is(!!mst[wrongWord].lastPick, '记下了错选的内容: ' + mst[wrongWord].lastPick);
+  is(bareKey(Object.keys(mst)[0]) === wrongWord, '记录的正是答错的词: ' + bareKey(Object.keys(mst)[0]));
+  is(!!mk() && mk().part === 'A', 'part = A');
+  is(!!mk() && mk().wrongCount === 1, 'wrongCount = 1');
+  is(!!mk() && mk().level === 1, '记录里标明了 level = 1');
+  is(!!mk() && !!mk().lastPick, '记下了错选的内容: ' + (mk() || {}).lastPick);
   is($('revBadge').textContent === '1' && !$('revBadge').classList.contains('hidden'), '角标显示 1');
   is($('btnRetest').style.display !== 'none', '「重测错题」按钮出现');
   is($('quizBody').textContent.indexOf('本次做错的题') >= 0, '成绩页列出本次错题');
@@ -422,9 +460,9 @@ const errors = [];
   fillCorrect(wrongWord);
   answerWrongA(wrongWord);
   $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
-  mst = JSON.parse(win.localStorage.getItem('va.l1.mistakes'));
+  mst = myMistakes(1);
   is(Object.keys(mst).length === 1, '仍然只有 1 题（没有重复添加）');
-  is(mst[wrongWord].wrongCount === 2, 'wrongCount 累加到 2（实际 ' + mst[wrongWord].wrongCount + '）');
+  is(mst['1:A::' + wrongWord].wrongCount === 2, 'wrongCount 累加到 2（实际 ' + mst['1:A::' + wrongWord].wrongCount + '）');
 
   console.log('\n=== 9. 重测：只出错题，答对后移出错题本 ===');
   switchTo('quiz');
@@ -437,7 +475,7 @@ const errors = [];
   is(rWord === wrongWord, '重测的正是那道错题: ' + rWord);
   fillCorrect();
   $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
-  const m4 = JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}');
+  const m4 = myMistakes(1);
   is(Object.keys(m4).length === 0, '答对后错题本清空（实际 ' + Object.keys(m4).length + ' 项）');
   is($('revBadge').classList.contains('hidden'), '角标重新隐藏');
 
@@ -468,11 +506,11 @@ const errors = [];
   is(!!modal(), '点清空弹出页面内确认框');
   is(modalText().indexOf('不可恢复') >= 0, '弹窗提示不可恢复');
   clickModal('取消');
-  is(Object.keys(JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}')).length > 0,
+  is(Object.keys(myMistakes(1)).length > 0,
      '点「取消」后错题仍在');
   $('btnClear').dispatchEvent(new win.Event('click', { bubbles: true }));
   clickModal('确定清空');
-  is(Object.keys(JSON.parse(win.localStorage.getItem('va.l1.mistakes') || '{}')).length === 0,
+  is(Object.keys(myMistakes(1)).length === 0,
      '清空后没有错题');
   is($('reviewList').querySelectorAll('.mist').length === 0, '错题列表清空');
   is($('reviewList').textContent.indexOf('错题本是空的') >= 0, '显示空状态');
@@ -547,6 +585,159 @@ const errors = [];
   } catch (e) {
     bad('确认流程触发了原生对话框: ' + nativeHit + ' — ' + e.message);
   }
+
+  console.log('\n=== 16. 切换到 Level 2 ===');
+  // 切级别前先确认状态干净：回到测验首屏
+  const sel2 = $('levelSelect');
+  is(sel2.options.length === 10, '下拉框列出 10 级');
+  const opt2 = Array.from(sel2.options).find((o) => o.value === '2');
+  is(!!opt2 && !opt2.disabled, 'Level 2 可选（未被禁用）');
+  const opt3 = Array.from(sel2.options).find((o) => o.value === '3');
+  is(!!opt3 && opt3.disabled, 'Level 3 显示为「待补」且禁用');
+  is(opt2.textContent.indexOf('待补') < 0, 'Level 2 的选项文字没有「待补」');
+
+  switchTo('quiz');
+  sel2.value = '2';
+  sel2.dispatchEvent(new win.Event('change', { bubbles: true }));
+  is(sel2.value === '2', '已切到 Level 2');
+  is($('quizTitle').textContent.indexOf('Level 2') >= 0, '标题变成 Level 2：' + $('quizTitle').textContent);
+  is($('levelInfo').textContent.indexOf('50 词') >= 0, 'Level 2 也是 50 词：' + $('levelInfo').textContent);
+  is($('wl').querySelectorAll('details').length === 50, 'Level 2 词汇表 50 条');
+  is($('revBadge').classList.contains('hidden'), 'Level 2 的错题本是独立的（初始为空）');
+
+  // Level 2 的题面确实是 Level 2 的词
+  const L2 = win.VA.getLevel(2);
+  const L2A = L2.parts.A, L2B = L2.parts.B, L2C = L2.parts.C, L2D = L2.parts.D;
+  const L2MATCH = win.VA.matchChoices(2);
+  $('btnStart').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const l2words = Array.from($('quizBody').querySelectorAll('.aword')).map((e) => e.textContent.trim());
+  is(l2words.length === 20, 'Level 2 Part A 有 20 题');
+  const allL2 = new Set(L2.words.map((w) => w.word));
+  const foreign = l2words.filter((w) => !allL2.has(w));
+  is(foreign.length === 0, 'Part A 出的都是 Level 2 的词（越界: ' + foreign.join(',') + '）');
+  const l1Only = ['paraphrase', 'ostensible', 'digress'];
+  is(l2words.filter((w) => l1Only.indexOf(w) >= 0).length === 0, 'Part A 里没有混进 Level 1 的词');
+
+  console.log('\n=== 17. Level 2 判分与错题本 ===');
+  // 自动答对 Level 2 的 50 题
+  function fillCorrectL2(exceptWord) {
+    let n = 0;
+    const txt = {};
+    L2MATCH.forEach((c) => { txt[c.key] = c.text; });
+    Array.prototype.forEach.call($('quizBody').querySelectorAll('select'), (sel) => {
+      const word = sel.closest('.arow').querySelector('.aword').textContent.trim();
+      if (word === exceptWord) return;
+      const idx = L2A.items.map((x) => x.word).indexOf(word);
+      if (idx < 0) return;
+      const want = txt[L2MATCH[idx].key];
+      const o = Array.prototype.slice.call(sel.options)
+        .find((x) => x.value && x.textContent.replace(/^[A-Z]\.\s*/, '') === want);
+      if (!o) return;
+      sel.value = o.value;
+      sel.dispatchEvent(new win.Event('change', { bubbles: true }));
+      n++;
+    });
+    Array.prototype.forEach.call($('quizBody').querySelectorAll('input[type=radio]'), (r) => {
+      const m = /^([BD])(\d+)$/.exec(r.name || '');
+      if (!m) return;
+      const src = m[1] === 'B' ? L2B.items : L2D.items;
+      const it = src[parseInt(m[2], 10)];
+      if (!it || r.value !== it.answer) return;
+      r.checked = true;
+      r.dispatchEvent(new win.Event('change', { bubbles: true }));
+      n++;
+    });
+    Array.prototype.forEach.call($('quizBody').querySelectorAll('input[type=text]'), (inp) => {
+      const it = L2C.items[parseInt(String(inp.getAttribute('data-qid')).replace(/^C/, ''), 10)];
+      if (!it) return;
+      inp.value = it.answer;
+      inp.dispatchEvent(new win.Event('input', { bubbles: true }));
+      n++;
+    });
+    return n;
+  }
+  const l2filled = fillCorrectL2();
+  is(l2filled === 50, 'Level 2 自动填答覆盖 50 题（实际 ' + l2filled + '）');
+  $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const l2score = $('quizBody').querySelector('.ring .n');
+  is(!!l2score && l2score.textContent === '50', 'Level 2 全对得 50/50（实际 ' +
+     (l2score ? l2score.textContent : '无') + '）');
+  is(Object.keys(myMistakes(2)).length === 0, 'Level 2 全对后错题本为空');
+  is(Object.keys(myMistakes(1)).length > 0, 'Level 1 的错题本不受影响（仍留有记录）');
+
+  // 故意答错一题 → 记进 Level 2 的错题本
+  $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const l2first = $('quizBody').querySelector('.aword').textContent.trim();
+  fillCorrectL2(l2first);
+  const row2 = Array.prototype.slice.call($('quizBody').querySelectorAll('.arow'))
+    .find((r) => r.querySelector('.aword').textContent.trim() === l2first);
+  const s2 = row2.querySelector('select');
+  const idx2 = L2A.items.map((x) => x.word).indexOf(l2first);
+  const want2 = L2MATCH[idx2].text;
+  const bad2 = Array.prototype.slice.call(s2.options)
+    .find((o) => o.value && o.textContent.replace(/^[A-Z]\.\s*/, '') !== want2);
+  s2.value = bad2.value;
+  s2.dispatchEvent(new win.Event('change', { bubbles: true }));
+  $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const m2b = myMistakes(2);
+  is(Object.keys(m2b).length === 1, 'Level 2 错题本记录 1 条（实际 ' + Object.keys(m2b).length + '）');
+  is(!!m2b['2:A::' + l2first], '键名带 Level 2 + Part 前缀: 2:A::' + l2first);
+  is(m2b['2:A::' + l2first].level === 2, '记录里 level = 2');
+  is($('revBadge').textContent === '1', 'Level 2 角标为 1');
+  is(Object.keys(myMistakes(1)).length > 0, 'Level 1 错题本仍独立存在');
+
+  console.log('\n=== 18. 切回 Level 1 → 状态互相独立 ===');
+  sel2.value = '1';
+  sel2.dispatchEvent(new win.Event('change', { bubbles: true }));
+  is(sel2.value === '1', '切回 Level 1');
+  is($('quizTitle').textContent.indexOf('Level 1') >= 0, '标题回到 Level 1');
+  const l1badge = parseInt($('revBadge').textContent, 10);
+  is(l1badge === Object.keys(myMistakes(1)).length,
+     'Level 1 角标显示自己的错题数（' + l1badge + '）');
+  is(l1badge !== 1 || Object.keys(myMistakes(1)).length === 1,
+     '没有把 Level 2 的错题混进 Level 1');
+
+  // 切回 Level 1 后题目必须是 Level 1 的词
+  $('btnStart').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const backWords = Array.from($('quizBody').querySelectorAll('.aword')).map((e) => e.textContent.trim());
+  is(backWords.filter((w) => l1Only.indexOf(w) >= 0).length > 0,
+     '切回后出的确实是 Level 1 的词（含 ' + backWords.filter((w) => l1Only.indexOf(w) >= 0).join(',') + '）');
+
+  console.log('\n=== 19. 同一个词同时出现在 A 和 D 时不能互相覆盖 ===');
+  // 曾经的 bug：matchKey 只用单词本身，于是 Level 2 里既在 Part A（选释义）
+  // 又在 Part D（近义辨析）的词只会留下一条记录，另一条被覆盖。
+  win.localStorage.setItem('va.l2.mistakes', '{}');
+  const dupWord = L2A.items.map((x) => x.word)
+    .find((w) => L2D.items.some((d) => (d.lookup || d.word) === w));
+  is(!!dupWord, 'Level 2 里找到同时出现在 A 与 D 的词: ' + dupWord);
+  // 直接开一套 Level 2 的新测验（切到 Level 2 后 startQuiz）
+  sel2.value = '2';
+  sel2.dispatchEvent(new win.Event('change', { bubbles: true }));
+  switchTo('quiz');
+  $('btnStart').dispatchEvent(new win.Event('click', { bubbles: true }));
+  fillCorrectL2(dupWord);                       // 其余全对
+  // A 里答错这个词
+  const rowA = Array.prototype.slice.call($('quizBody').querySelectorAll('.arow'))
+    .find((r) => r.querySelector('.aword').textContent.trim() === dupWord);
+  const sa = rowA.querySelector('select');
+  const wantA = L2MATCH[L2A.items.map((x) => x.word).indexOf(dupWord)].text;
+  const badA = Array.prototype.slice.call(sa.options)
+    .find((o) => o.value && o.textContent.replace(/^[A-Z]\.\s*/, '') !== wantA);
+  sa.value = badA.value;
+  sa.dispatchEvent(new win.Event('change', { bubbles: true }));
+  // D 里也答错这个词
+  const dIdx = L2D.items.map((x) => x.lookup || x.word).indexOf(dupWord);
+  const dRadio = $('quizBody').querySelector('input[name="D' + dIdx + '"]:not(:checked)');
+  if (dRadio) {
+    dRadio.checked = true;
+    dRadio.dispatchEvent(new win.Event('change', { bubbles: true }));
+  }
+  $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const dm = myMistakes(2);
+  is(!!dm['2:A::' + dupWord], 'A 的记录存在: 2:A::' + dupWord);
+  is(!!dm['2:D::' + dupWord], 'D 的记录也存在: 2:D::' + dupWord);
+  is(Object.keys(dm).length === 2, '两条记录并存、互不覆盖（实际 ' + Object.keys(dm).length + ' 条）');
+  is(partOf('2:A::' + dupWord) === 'A' && partOf('2:D::' + dupWord) === 'D', 'Part 前缀解析正确');
 
   console.log('\n' + '='.repeat(52));
   console.log(fail === 0 ? 'DOM 冒烟测试全部通过。' : fail + ' 项失败。');

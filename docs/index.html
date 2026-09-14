@@ -29,6 +29,16 @@
   .brand span{background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;color:transparent}
   .badge{font-size:11px;padding:3px 9px;border:1px solid var(--line);border-radius:999px;color:var(--dim)}
 
+  /* ---------- 级别选择 ---------- */
+  .levelbar{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+    padding:10px 14px;margin-bottom:14px;
+  }
+  .levelbar .lbl{font-size:13px;color:var(--dim)}
+  .levelbar select{width:auto;min-width:170px;padding:7px 11px;font-size:14px}
+  .levelbar .dim2{margin-left:auto}
+
   nav.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
   nav.tabs button{
     background:var(--panel);color:var(--dim);border:1px solid var(--line);
@@ -198,9 +208,14 @@
 
   <header class="top">
     <div class="brand">Verbal&nbsp;<span>Advantage</span></div>
-    <span class="badge">Level 1 · 50 words</span>
     <span class="badge" id="srcBadge">离线可用</span>
   </header>
+
+  <div class="levelbar">
+    <span class="lbl">级别</span>
+    <select id="levelSelect" aria-label="选择级别"></select>
+    <span class="dim2" id="levelInfo"></span>
+  </div>
 
   <nav class="tabs" id="tabs">
     <button data-tab="quiz" class="on">📝 测验</button>
@@ -213,14 +228,11 @@
   <!-- ============ QUIZ ============ -->
   <section id="tab-quiz">
     <div id="quizIntro" class="card">
-      <h2>Level 1 自测</h2>
-      <p class="muted">
-        50 道题，四个部分：<b>词义连线</b>（20）· <b>同反义判断</b>（10）· <b>选词填空</b>（10）· <b>近义辨析</b>（10）。
-        选项顺序每次都会重新打乱。答完立刻能看到每题的答案与原书解析。
-      </p>
+      <h2 id="quizTitle">Level 1 自测</h2>
+      <p class="muted" id="quizDesc"></p>
       <div class="breakdown">
-        <span class="chip">题库：<b>50</b> 词</span>
-        <span class="chip">来源：<b>原书 Level 1</b></span>
+        <span class="chip">题库：<b id="chipWords">50</b> 词</span>
+        <span class="chip">题目：<b id="chipQs">50</b> 题</span>
         <span class="chip">建议限时：<b>20 分钟</b></span>
       </div>
       <div class="btns">
@@ -301,8 +313,7 @@
   <!-- ============ WORDLIST ============ -->
   <section id="tab-list" class="hidden">
     <div class="card">
-      <h2>Level 1 词汇表（50）</h2>
-      <div class="search">
+      <h2 id="wlTitle">Level 1 词汇表（50）</h2>      <div class="search">
         <input type="text" id="wlSearch" placeholder="搜索单词或中文释义…">
       </div>
       <div class="wl" id="wl"></div>
@@ -314,8 +325,9 @@
     <div class="card">
       <h2>说明</h2>
       <p class="muted">
-        本页面是 <i>[GRE语文优势] Verbal Advantage</i> 的 <b>Level 1</b> 自测工具。
-        全部 50 个 keyword、释义与辨析要点均取自原书，题目中若干干扰项也沿用原书复习题的设计。
+        本页面是 <i>[GRE语文优势] Verbal Advantage</i> 的自测工具。
+        <b>Level 1</b> 与 <b>Level 2</b> 各 50 个 keyword，释义与辨析要点均取自原书，
+        题目中若干干扰项也沿用原书复习题的设计。用页面顶部的「级别」下拉框切换。
       </p>
       <p class="muted" style="margin-top:12px">
         <b>纯静态、无后端：</b>打开 <code>index.html</code> 即可用，无需服务器、无需联网。
@@ -336,29 +348,113 @@
       </p>
       <div class="breakdown" style="margin-top:14px">
         <span class="chip">Level 1 <b>可用</b></span>
-        <span class="chip">Level 2–10 <b>待补</b></span>
+        <span class="chip">Level 2 <b>可用</b></span>
+        <span class="chip">Level 3–10 <b>待补</b></span>
       </div>
       <p class="dim2" style="margin-top:14px">
-        想把 Level 2–10 也加进来，只要往 <code>docs/data.js</code> 里补单词和题目即可。
+        各级进度与错题本分别存储，互不干扰。想把 Level 3–10 也加进来，
+        新增一个 <code>docs/data-levelN.js</code>（照抄 <code>data-level2.js</code> 的结构），
+        再在 <code>index.html</code> 里加一行 <code>&lt;script src="data-levelN.js"&gt;</code> 即可。
       </p>
     </div>
   </section>
 
   <footer>
-    数据来源：<span id="srcName"></span> · Keywords 1–50 (Level 1)<br>
-    纯前端单页 · 可离线运行 · 可直接托管在 GitHub Pages
+    数据来源：<span id="srcName"></span> · Level 1–2 各 50 词<br>
+    纯前端单页 · 可离线运行 · 可托管在 GitHub Pages
   </footer>
 </div>
 
 <script src="data.js"></script>
+<script src="data-level1.js"></script>
+<script src="data-level2.js"></script>
 <script>
 (function () {
   'use strict';
 
-  var LS_KNOWN = 'va.l1.known';
-  var LS_LAST = 'va.l1.last';
-  var LS_MIST = 'va.l1.mistakes';
-  var L1 = VA_LEVEL1.slice();
+  /* ---------------- 级别状态 ----------------
+     所有跟级别相关的数据都从 CUR 取，切换级别时由 applyLevel() 整体刷新。
+     存储键也带级别后缀，各级进度互不干扰。 */
+  var CUR = 1;                                  // 当前级别
+  var AVAIL = VA.availableLevels();              // 已注册的级别
+  var LV = null;                                 // 当前级别的数据（VA.getLevel(CUR)）
+  var WORDS = [];                                // 当前级别的 50 个核心词
+
+  function applyLevel(lv) {
+    CUR = lv;
+    LV = VA.getLevel(lv);
+    WORDS = LV.words.filter(function (w) { return !w.extra; });
+    // 换级别时清掉词汇表搜索词，否则上一级的搜索会「过滤掉」新一级的词
+    if ($('wlSearch')) $('wlSearch').value = '';
+    levelUi();
+    fcState.known = load(kKnown(), {});
+    buildFcOrder();
+    renderList('');
+    refreshResume();
+    // 回到测验页，清掉上一级的作答
+    quiz = null;
+    $('quizBody').innerHTML = '';
+    $('quizBody').classList.add('hidden');
+    $('quizIntro').classList.remove('hidden');
+    $('reportBox').classList.add('hidden');
+  }
+
+  function kKnown() { return 'va.l' + CUR + '.known'; }
+  function kLast() { return 'va.l' + CUR + '.last'; }
+  function kMist() { return 'va.l' + CUR + '.mistakes'; }
+
+  /* 级别下拉框 + 各级信息 */
+  function levelUi() {
+    var sel = $('levelSelect');
+    if (!sel.options.length) {
+      VA.meta().forEach(function (m) {
+        var ok = AVAIL.indexOf(m.level) >= 0;
+        var o = document.createElement('option');
+        o.value = String(m.level);
+        o.textContent = 'Level ' + m.level + (ok ? '' : '（待补）') + ' · ' + m.range;
+        o.disabled = !ok;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', function () { switchLevel(parseInt(this.value, 10)); });
+    }
+    sel.value = String(CUR);
+    var parts = VA.partsOf(CUR);
+    var desc = parts.map(function (p) {
+      return '<b>' + esc(p.title) + '</b>（' + p.items.length + '）';
+    }).join(' · ');
+    $('levelInfo').textContent = WORDS.length + ' 词 · ' + LV.questionCount + ' 题';
+    $('quizTitle').textContent = 'Level ' + CUR + ' 自测';
+    $('quizDesc').innerHTML = LV.questionCount + ' 道题，' + parts.length +
+      ' 个部分：' + desc + '。<br>选项顺序每次都会重新打乱。答完立刻能看到每题的答案与原书解析。';
+    $('chipWords').textContent = WORDS.length;
+    $('chipQs').textContent = LV.questionCount;
+    $('fcTotal').textContent = WORDS.length;
+    if ($('wlTitle')) $('wlTitle').textContent = 'Level ' + CUR + ' 词汇表（' + WORDS.length + '）';
+    document.title = 'Verbal Advantage — Level ' + CUR + ' 词汇自测';
+  }
+
+  function switchLevel(lv) {
+    if (lv === CUR || AVAIL.indexOf(lv) < 0) return;
+    // 若当前有未提交的作答，先确认
+    var pending = quiz && !quiz.submitted && answeredCount() > 0;
+    if (pending) {
+      showModal({
+        title: '切换级别？',
+        message: '当前 Level ' + CUR + ' 还有未提交的作答，切换后会丢失。',
+        buttons: [
+          { label: '取消', onClick: function () { $('levelSelect').value = String(CUR); } },
+          { label: '切换', primary: true, onClick: function () { doSwitchLevel(lv); } }
+        ]
+      });
+      return;
+    }
+    doSwitchLevel(lv);
+  }
+
+  function doSwitchLevel(lv) {
+    save('va.curLevel', lv);
+    applyLevel(lv);
+  }
 
   /* ---------------- utils ---------------- */
   function shuffle(arr) {
@@ -444,105 +540,118 @@
   var quiz = null;
 
   /* 每道题的稳定标识（跨次测验不变），用于错题本与重测。
-     A → 单词；B → 词对；C → 句子（答案也一起，保证唯一）；D → 单词 */
+     形如 "A::paraphrase"、"B::a|b"、"C::句子@@答案"、"D::word"。
+     带 Part 前缀是必须的：同一个词可能同时在 Part A 和 Part D 出现。 */
   function matchKeyOf(partId, it) {
-    if (partId === 'A') return it.word;
-    if (partId === 'B') return it.a + '|' + it.b;
-    if (partId === 'C') return it.text + '@@' + it.answer;
-    if (partId === 'D') return it.lookup || it.word;
-    return it.qid;
+    return VA.matchKeyOf(partId, it);
   }
 
-  /* 构建一套测验。
-     onlyKeys 为空 → 完整 50 题；否则只出这些 matchKey 对应的题（错题重测）。 */
+  /* 构建一套测验（当前级别）。
+     onlyKeys 为空 → 全部题目；否则只出这些 matchKey 对应的题（错题重测）。
+     onlyKeys 里传的是**裸 key**（不含 Part / 级别前缀），因为错题本的
+     存储键带前缀，而 mistakeKeys() 已把前缀剥掉了。 */
   function buildQuiz(onlyKeys) {
     var filt = onlyKeys && onlyKeys.length ? onlyKeys : null;
-    var inSet = function (k) { return !filt || filt.indexOf(k) >= 0; };
+    var inSet = function (partId, it) {
+      if (!filt) return true;
+      var bare = VA.matchKeyOf(partId, it);
+      if (bare == null) return false;
+      // matchKeyOf 返回 "Part::key"，这里比较其中的裸 key 部分
+      var j = bare.indexOf('::');
+      return filt.indexOf(j >= 0 ? bare.slice(j + 2) : bare) >= 0;
+    };
+    var defs = {};                       // partId -> 该级的原始定义
+    VA.partsOf(CUR).forEach(function (p) { defs[p.id] = p; });
     var parts = [];
 
-    /* Part A —— 词义连线。重测时只保留错过的词，并从完整选项表里重建字母映射 */
-    var allAKeys = {};
-    VA_PART_A.choices.forEach(function (c) { allAKeys[c.key] = c.text; });
-    var aSrc = VA_PART_A.items.filter(function (it) { return inSet(it.word); });
-    if (aSrc.length) {
-      // 重新分配选项字母：把用到的释义按原字母顺序抽出来，再打乱
-      var usedKeys = {};
-      aSrc.forEach(function (it) { usedKeys[it.answer] = 1; });
-      var subChoices = Object.keys(usedKeys).sort().map(function (k) {
-        return { key: k, text: allAKeys[k] };
-      });
-      var shuffled = shuffle(subChoices);
-      // 旧字母 → 新字母
-      var remap = {};
-      shuffled.forEach(function (c, i) {
-        remap[c.key] = String.fromCharCode(65 + i); // A, B, C…
-      });
-      var finalChoices = shuffled.map(function (c) {
-        return { key: remap[c.key], text: c.text };
-      });
-      parts.push({
-        id: 'A', title: VA_PART_A.title, instruction: VA_PART_A.instruction,
-        type: 'match', choices: finalChoices,
-        items: shuffle(aSrc).map(function (it, i) {
-          return {
-            qid: 'A' + i, matchKey: it.word, word: it.word,
-            answer: remap[it.answer], srcAnswer: it.answer
-          };
-        })
-      });
+    /* Part A —— 词义连线。重测时只保留错过的词，并重新分配选项字母 */
+    var defA = defs.A;
+    if (defA) {
+      var allA = VA.matchChoices(CUR);     // [{key,text,answer}]，key 与 items 索引对应
+      var aSrc = defA.items.filter(function (it) { return inSet('A', it); });
+      if (aSrc.length) {
+        // 取出用到的释义，打乱后重新编号 A、B、C…
+        var used = {};
+        aSrc.forEach(function (it) { used[it.answer] = 1; });
+        var pool = allA.filter(function (c) { return used[c.key]; });
+        var shuffled = shuffle(pool);
+        var remap = {};
+        shuffled.forEach(function (c, i) { remap[c.key] = VA.abc.charAt(i); });
+        var finalChoices = shuffled.map(function (c) {
+          return { key: remap[c.key], text: c.text };
+        });
+        parts.push({
+          id: 'A', title: defA.title, instruction: defA.instruction,
+          type: 'match', choices: finalChoices,
+          items: shuffle(aSrc).map(function (it, i) {
+            return {
+              qid: 'A' + i, matchKey: matchKeyOf('A', it), word: it.word,
+              answer: remap[it.answer], srcAnswer: it.answer
+            };
+          })
+        });
+      }
     }
 
-    /* Part B —— 题目顺序保持原书顺序（打乱选项即可，题目次序本就有难度递进） */
-    var bSrc = VA_PART_B.items.filter(function (it) { return inSet(matchKeyOf('B', it)); });
-    if (bSrc.length) {
-      parts.push({
-        id: 'B', title: VA_PART_B.title, instruction: VA_PART_B.instruction,
-        type: 'choice',
-        items: bSrc.map(function (it, i) {
-          return {
-            qid: 'B' + i, matchKey: matchKeyOf('B', it), a: it.a, b: it.b,
-            answer: it.answer, reason: it.reason,
-            choices: VA_PART_B.options
-          };
-        })
-      });
+    /* Part B —— 题目顺序保持原书顺序（顺序本身有难度递进），只打乱选项 */
+    var defB = defs.B;
+    if (defB) {
+      var bSrc = defB.items.filter(function (it) { return inSet('B', it); });
+      if (bSrc.length) {
+        parts.push({
+          id: 'B', title: defB.title, instruction: defB.instruction,
+          type: 'choice',
+          items: bSrc.map(function (it, i) {
+            return {
+              qid: 'B' + i, matchKey: matchKeyOf('B', it), a: it.a, b: it.b,
+              answer: it.answer, reason: it.reason, choices: defB.options
+            };
+          })
+        });
+      }
     }
 
-    /* Part C —— 选词填空。重测时词库收窄到本题答案涉及的那几个词 */
-    var cSrc = VA_PART_C.items.filter(function (it) { return inSet(matchKeyOf('C', it)); });
-    if (cSrc.length) {
-      var bank = VA_PART_C.bank.filter(function (w) {
-        return cSrc.some(function (it) { return it.answer === w; });
-      });
-      parts.push({
-        id: 'C', title: VA_PART_C.title, instruction: VA_PART_C.instruction,
-        type: 'bank', bank: shuffle(bank),
-        items: cSrc.map(function (it, i) {
-          return {
-            qid: 'C' + i, matchKey: matchKeyOf('C', it), text: it.text,
-            answer: it.answer, hint: it.hint, reason: it.reason
-          };
-        })
-      });
+    /* Part C —— 选词填空。重测时词库收窄到这些题答案涉及的词 */
+    var defC = defs.C;
+    if (defC) {
+      var cSrc = defC.items.filter(function (it) { return inSet('C', it); });
+      if (cSrc.length) {
+        var bank = defC.bank.filter(function (w) {
+          return cSrc.some(function (it) { return it.answer === w; });
+        });
+        parts.push({
+          id: 'C', title: defC.title, instruction: defC.instruction,
+          type: 'bank', bank: shuffle(bank),
+          items: cSrc.map(function (it, i) {
+            return {
+              qid: 'C' + i, matchKey: matchKeyOf('C', it), text: it.text,
+              answer: it.answer, hint: it.hint, reason: it.reason
+            };
+          })
+        });
+      }
     }
 
-    /* Part D —— 题目顺序同样保持原书顺序，只打乱每个词的四个选项 */
-    var dSrc = VA_PART_D.items.filter(function (it) { return inSet(matchKeyOf('D', it)); });
-    if (dSrc.length) {
-      parts.push({
-        id: 'D', title: VA_PART_D.title, instruction: VA_PART_D.instruction,
-        type: 'choice',
-        items: dSrc.map(function (it, i) {
-          return {
-            qid: 'D' + i, matchKey: matchKeyOf('D', it), word: it.word,
-            lookup: it.lookup, answer: it.answer, reason: it.reason,
-            bonus: !!it.bonus, choices: shuffle(it.choices)
-          };
-        })
-      });
+    /* Part D —— 题目顺序同样保持原书顺序，只打乱每个词的选项 */
+    var defD = defs.D;
+    if (defD) {
+      var dSrc = defD.items.filter(function (it) { return inSet('D', it); });
+      if (dSrc.length) {
+        parts.push({
+          id: 'D', title: defD.title, instruction: defD.instruction,
+          type: 'choice',
+          items: dSrc.map(function (it, i) {
+            return {
+              qid: 'D' + i, matchKey: matchKeyOf('D', it), word: it.word,
+              lookup: it.lookup, answer: it.answer, reason: it.reason,
+              bonus: !!it.bonus, choices: shuffle(it.choices)
+            };
+          })
+        });
+      }
     }
 
-    return { parts: parts, answers: {}, submitted: false, retest: !!filt };
+    return { parts: parts, answers: {}, submitted: false, retest: !!filt, level: CUR };
   }
 
   function allItems() {
@@ -694,9 +803,9 @@
     var ansLabel = String(answer);
     if (it.choices) {
       it.choices.forEach(function (c) { if (c.k === answer) ansLabel = c.k + '. ' + c.t; });
-    } else if (it.srcAnswer != null && VA_PART_A && VA_PART_A.choices) {
+    } else if (it.srcAnswer != null) {
       // Part A 的字母在渲染时被重映射过，展示时用原始选项表，避免和题面字母对不上
-      VA_PART_A.choices.forEach(function (c) {
+      VA.matchChoices(CUR).forEach(function (c) {
         if (c.key === it.srcAnswer) ansLabel = c.key + '. ' + c.text;
       });
     }
@@ -869,7 +978,7 @@
       else if (v == null || v === '') skipped++;   // 没作答：不算错题
       else wrongNow.push(it);                        // 真答错了：记进错题本
     });
-    save(LS_LAST, {
+    save(kLast(), {
       right: right, total: items.length, at: Date.now(),
       skipped: skipped, answered: items.length - skipped
     });
@@ -887,23 +996,34 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  /* ---------------- 错题本 ---------------- */
+  /* ---------------- 错题本 ----------------
+     记录按级别分开存；每条记录的 key 带级别前缀，避免不同级别里同名单词互相覆盖。 */
   function getMistakes() {
-    var m = load(LS_MIST, {});
+    var m = load(kMist(), {});
     return (m && typeof m === 'object') ? m : {};
   }
-  function saveMistakes(m) { save(LS_MIST, m); refreshMistakeUI(); }
-  function mistakeKeys() { return Object.keys(getMistakes()); }
+  function saveMistakes(m) { save(kMist(), m); refreshMistakeUI(); }
+  /* 错题本的裸 key 列表（供重测过滤用）。
+     存储键是 "<level>:<Part>::<裸key>"，这里把两层前缀都剥掉 ——
+     只剥级别前缀是不够的，buildQuiz 比较的是纯裸 key。 */
+  function mistakeKeys() {
+    return Object.keys(getMistakes()).map(function (k) {
+      var s = VA.bareKeyOf(k);              // 去掉级别前缀
+      var j = s.indexOf('::');
+      return j >= 0 ? s.slice(j + 2) : s;   // 再去掉 Part 前缀
+    });
+  }
 
   /* 把一次提交的结果并入错题本：答错 → 记/累加；答对 → 移除（算是已经学会） */
-  /* 取某题「正确答案」的可读文字（记录时存下来，避免以后字母被重映射后对不上） */
-  function answerTextOf(it) {
+  /* 取某题「正确答案」的可读文字（记录时存下来，避免以后字母被重映射后对不上） */  function answerTextOf(it) {
     if (it.choices) {
       var hit = it.choices.filter(function (c) { return c.k === it.answer; })[0];
       return hit ? (hit.k + '. ' + hit.t) : String(it.answer);
     }
-    if (it.matchKey && it.word && it.srcAnswer != null) {
-      var ch = VA_PART_A.choices.filter(function (c) { return c.key === it.srcAnswer; })[0];
+    if (it.matchKey && it.srcAnswer != null) {
+      // 用渲染时那套（已重映射的）选项表查，才能与 it.answer 对得上
+      var pA = (quiz && quiz.parts.filter(function (p) { return p.id === 'A'; })[0]);
+      var ch = pA ? pA.choices.filter(function (c) { return c.key === it.answer; })[0] : null;
       return ch ? (ch.key + '. ' + ch.text) : String(it.answer);
     }
     return String(it.answer);
@@ -927,9 +1047,14 @@
   function recordResults(items) {
     var m = getMistakes(), now = new Date().toISOString();
     var added = 0, cleared = 0;
+    var prefix = CUR + ':';                    // 级别前缀，避免跨级同名冲突
     items.forEach(function (it) {
-      var key = it.matchKey;
-      if (!key) return;
+      if (!it.matchKey) return;
+      var key = prefix + it.matchKey;
+      // 裸 key（不含 Part 前缀），用于查释义 / 显示；it.matchKey 形如 "A::word"
+      var mk = String(it.matchKey);
+      var j = mk.indexOf('::');
+      var base = j >= 0 ? mk.slice(j + 2) : mk;
       var v = quiz.answers[it.qid];
       var answered = !(v == null || (typeof v === 'string' && v === ''));
       if (!answered) return;                 // 跳过没作答的
@@ -940,7 +1065,7 @@
         if (m[key]) { m[key].wrongCount++; m[key].lastWrong = now; }
         else {
           m[key] = {
-            part: partIdOf(it.qid), key: key, answer: it.answer,
+            part: partIdOf(it.qid), key: base, level: CUR, answer: it.answer,
             wrongCount: 1, firstWrong: now, lastWrong: now
           };
           added++;
@@ -957,55 +1082,72 @@
     return { added: added, cleared: cleared };
   }
 
-  /* 供错题页展示：把 matchKey 还原成可读的题面 */
+  /* 供错题页展示：把 matchKey 还原成可读的题面。
+     rec.level 记录出错时所在的级别，这样即使后来切了级别也能正确还原。 */
   function describeMistake(rec) {
     var p = rec.part;
+    var lv = rec.level || CUR;
+    var lvDef = VA.getLevel(lv);
+    var byWord = (lvDef && lvDef.byWord) || {};
+    // rec.key 是裸 key；旧记录里可能是带前缀的，这里统一兜底剥一次
+    var rawKey = String(rec.key == null ? '' : rec.key);
+    var j0 = rawKey.indexOf('::');
+    var base = j0 >= 0 ? rawKey.slice(j0 + 2) : rawKey;
     if (p === 'A') {
-      var w = VA_BY_WORD[rec.key];
-      // rec.answer 是**渲染时**重新映射过的字母，不能用原始 VA_PART_A.choices 去查
-      // （会拿到完全不相干的释义）。优先用记录时存下的文字，再退回按单词原文查。
-      var origA = VA_PART_A.items.filter(function (x) { return x.word === rec.key; })[0];
-      var origChoice = origA ? VA_PART_A.choices.filter(function (c) { return c.key === origA.answer; })[0] : null;
+      var w = byWord[base];
+      // rec.answer 是**渲染时**重新映射过的字母，不能拿它去查别的表。
+      // 优先用记录时存下的文字；兜底用该级 Part A 的原始字母表。
+      var fallback = '';
+      if (lvDef && lvDef.parts.A) {
+        var ao = lvDef.parts.A.items.filter(function (x) { return x.word === base; })[0];
+        if (ao) {
+          var chA = VA.matchChoices(lv).filter(function (c) { return c.key === ao.answer; })[0];
+          if (chA) fallback = chA.key + '. ' + chA.text;
+        }
+      }
       return {
-        kind: '词义连线', title: rec.key,
+        kind: '词义连线', title: base,
         sub: w ? (w.ipa ? '/' + w.ipa + '/ · ' + w.zh : w.zh) : '',
-        prompt: '选出「' + rec.key + '」的释义',
-        answerText: rec.answerText ||
-          (origChoice ? (origChoice.key + '. ' + origChoice.text) : ('选项 ' + rec.answer)),
+        prompt: '选出「' + base + '」的释义',
+        answerText: rec.answerText || fallback || ('选项 ' + rec.answer),
         reason: w ? w.def : ''
       };
     }
     if (p === 'B') {
-      var parts = rec.key.split('|');
+      var parts = base.split('|');
+      var defB = lvDef && lvDef.parts.B;
+      var hitB = defB ? defB.items.filter(function (x) { return x.a + '|' + x.b === base; })[0] : null;
       return {
         kind: '同反义判断', title: parts[0] + '  vs  ' + parts[1],
         sub: '', prompt: '判断同义(S)还是反义(A)',
         answerText: rec.answerText ||
           (rec.answer === 'S' ? '同义 Synonyms' : '反义 Antonyms'),
-        reason: (VA_PART_B.items.filter(function (x) { return x.a + '|' + x.b === rec.key; })[0] || {}).reason || ''
+        reason: (hitB && hitB.reason) || ''
       };
     }
     if (p === 'C') {
-      var txt = String(rec.key).split('@@')[0];
-      var c = VA_PART_C.items.filter(function (x) { return x.text === txt; })[0] || {};
+      var txt = base.split('@@')[0];
+      var defC = lvDef && lvDef.parts.C;
+      var hitC = defC ? defC.items.filter(function (x) { return x.text === txt; })[0] : null;
       return {
         kind: '选词填空', title: rec.answer, sub: '', prompt: rec.lastQuestion || txt,
-        answerText: rec.answerText || rec.answer, reason: c.reason || ''
+        answerText: rec.answerText || rec.answer, reason: (hitC && hitC.reason) || ''
       };
     }
     if (p === 'D') {
-      var d = VA_PART_D.items.filter(function (x) {
-        return (x.lookup || x.word) === rec.key;
-      })[0] || {};
+      var defD = lvDef && lvDef.parts.D;
+      var d = (defD ? defD.items.filter(function (x) {
+        return (x.lookup || x.word) === base;
+      })[0] : null) || {};
       var ch = (d.choices || []).filter(function (x) { return x.k === rec.answer; })[0];
       return {
-        kind: '近义辨析', title: rec.key, sub: '', prompt: d.word || rec.key,
+        kind: '近义辨析', title: base, sub: '', prompt: d.word || base,
         answerText: rec.answerText || (ch ? (ch.k + '. ' + ch.t) : rec.answer),
         reason: d.reason || ''
       };
     }
     return {
-      kind: p || '?', title: rec.key, sub: '',
+      kind: p || '?', title: base, sub: '',
       prompt: rec.lastQuestion || '', answerText: rec.answerText || rec.answer, reason: ''
     };
   }
@@ -1028,30 +1170,31 @@
 
   function renderReview() {
     var m = getMistakes();
-    var keys = Object.keys(m);
+    var storeKeys = Object.keys(m);
     // 按「错得最多」优先，其次最近错的
-    keys.sort(function (a, b) {
+    storeKeys.sort(function (a, b) {
       return (m[b].wrongCount - m[a].wrongCount) ||
         String(m[b].lastWrong).localeCompare(String(m[a].lastWrong));
     });
-    var words = {}, attempts = 0;
-    keys.forEach(function (k) { attempts += m[k].wrongCount; });
-    $('revCount').textContent = keys.length;
+    var attempts = 0;
+    storeKeys.forEach(function (k) { attempts += m[k].wrongCount; });
+    $('revCount').textContent = storeKeys.length;
     $('revAttempts').textContent = attempts;
     refreshMistakeUI();
 
     var host = $('reviewList');
-    if (!keys.length) {
-      host.innerHTML = '<div class="card empty">错题本是空的 🎉<br>' +
+    if (!storeKeys.length) {
+      host.innerHTML = '<div class="card empty">Level ' + CUR + ' 的错题本是空的 🎉<br>' +
         '<span class="dim2">去做一次测验吧，答错的题会自动记到这里。</span></div>';
       $('revWords').textContent = '0';
       return;
     }
+    var uniq = {};
     var html = '';
-    keys.forEach(function (k) {
+    storeKeys.forEach(function (k) {
       var rec = m[k];
       var d = describeMistake(rec);
-      if (d.title) words[d.title.split(' ')[0]] = 1;
+      if (d.title) uniq[d.title] = 1;
       html += '<div class="mist"><div class="top">' +
         '<span class="key">' + esc(d.title) + '</span>' +
         '<span class="kind">' + esc(d.kind) + '</span>' +
@@ -1070,46 +1213,51 @@
       html += '</div>';
     });
     host.innerHTML = html;
-    // 统计涉及多少个不同的词
-    var uniq = {};
-    keys.forEach(function (k) {
-      var d = describeMistake(m[k]);
-      uniq[d.title] = 1;
-    });
     $('revWords').textContent = Object.keys(uniq).length;
   }
 
-  /* 更新首屏的「上次成绩」提示，并同步错题按钮状态 */
+  /* 更新首屏的「上次成绩」提示，并同步错题按钮状态。
+     同时汇总其它级别的错题数，方便知道还有哪一级欠着。 */
   function refreshResume() {
-    var last = load(LS_LAST, null);
+    var last = load(kLast(), null);
     var el = $('lastScore');
     var keys = mistakeKeys();
+    var line = '';
     if (last) {
       var d = new Date(last.at);
-      var line = '上次成绩：' + last.right + ' / ' + last.total +
+      line = '上次成绩：' + last.right + ' / ' + last.total +
         '（' + Math.round(last.right / last.total * 100) + '%） · ' +
         d.toLocaleString('zh-CN');
-      if (keys.length) line += '　|　错题本还有 ' + keys.length + ' 题待重测';
-      el.textContent = line;
-    } else {
-      el.textContent = '';
     }
+    if (keys.length) {
+      line += (line ? '　|　' : '') + '本级别错题本还有 ' + keys.length + ' 题待重测';
+    }
+    // 其它级别的错题提示
+    var others = [];
+    AVAIL.forEach(function (lv) {
+      if (lv === CUR) return;
+      var om = load('va.l' + lv + '.mistakes', {});
+      var n = Object.keys(om || {}).length;
+      if (n) others.push('Level ' + lv + ' 有 ' + n + ' 题');
+    });
+    if (others.length) line += (line ? '　|　' : '') + others.join('，');
+    el.textContent = line;
     refreshMistakeUI();
   }
 
   $('btnStart').addEventListener('click', function () { startQuiz(); });
 
   /* ---------------- flashcards ---------------- */
-  var fcState = { order: [], idx: 0, known: load(LS_KNOWN, {}) };
+  var fcState = { order: [], idx: 0, known: {} };
 
   function buildFcOrder() {
     // 只练还没标记「已掌握」的词；全部掌握后回到整册重刷
-    var un = L1.filter(function (w) { return !fcState.known[w.word]; });
-    fcState.order = shuffle(un.length ? un : L1);
+    var un = WORDS.filter(function (w) { return !fcState.known[w.word]; });
+    fcState.order = shuffle(un.length ? un : WORDS);
     fcState.idx = 0;
   }
   function knownCount() {
-    return L1.filter(function (w) { return fcState.known[w.word]; }).length;
+    return WORDS.filter(function (w) { return fcState.known[w.word]; }).length;
   }
   function renderCard() {
     if (!fcState.order.length) buildFcOrder();
@@ -1127,32 +1275,34 @@
     if (w.note) b += '<div class="note">⚠ ' + esc(w.note) + '</div>';
     $('fcBack').innerHTML = b;
     $('fcKnown').textContent = knownCount();
-    $('fcTotal').textContent = L1.length;
+    $('fcTotal').textContent = WORDS.length;
     $('fcPos').textContent = (fcState.idx + 1) + ' / ' + fcState.order.length;
   }
   $('fc').addEventListener('click', function () { this.classList.toggle('flip'); });
   $('fcNext').addEventListener('click', function () {
+    if (!fcState.order.length) return;
     fcState.idx = (fcState.idx + 1) % fcState.order.length; renderCard();
   });
   $('fcPrev').addEventListener('click', function () {
+    if (!fcState.order.length) return;
     fcState.idx = (fcState.idx - 1 + fcState.order.length) % fcState.order.length; renderCard();
   });
   $('fcKnow').addEventListener('click', function () {
     var w = fcState.order[fcState.idx];
-    if (w) { fcState.known[w.word] = 1; save(LS_KNOWN, fcState.known); }
+    if (w) { fcState.known[w.word] = 1; save(kKnown(), fcState.known); }
     // 从队列中移除已掌握的词，停留在同一位置即下一个
     buildFcOrder();
     renderCard();
   });
   $('fcReset').addEventListener('click', function () {
-    fcState.known = {}; save(LS_KNOWN, {}); buildFcOrder(); renderCard();
+    fcState.known = {}; save(kKnown(), {}); buildFcOrder(); renderCard();
   });
 
   /* ---------------- word list ---------------- */
   function renderList(q) {
     q = (q || '').trim().toLowerCase();
     var html = '';
-    L1.forEach(function (w) {
+    WORDS.forEach(function (w) {
       if (q && w.word.toLowerCase().indexOf(q) < 0 &&
           (w.zh || '').indexOf(q) < 0 &&
           (w.def || '').toLowerCase().indexOf(q) < 0) return;
@@ -1178,11 +1328,11 @@
       return (m[b].wrongCount - m[a].wrongCount) ||
         String(m[b].lastWrong).localeCompare(String(m[a].lastWrong));
     });
-    var last = load(LS_LAST, null);
+    var last = load(kLast(), null);
     var L = [];
-    L.push('Verbal Advantage — Level 1 错题报告');
+    L.push('Verbal Advantage — Level ' + CUR + ' 错题报告');
     L.push('生成时间: ' + new Date().toLocaleString('zh-CN'));
-    L.push('题库来源: ' + VA_SOURCE);
+    L.push('题库来源: ' + VA.source);
     if (last) L.push('最近一次成绩: ' + last.right + '/' + last.total +
       '（' + Math.round(last.right / last.total * 100) + '%）');
     L.push('错题数: ' + keys.length);
@@ -1282,11 +1432,12 @@
   });
 
   /* ---------------- init ---------------- */
-  $('srcName').textContent = VA_SOURCE;
-  $('fcTotal').textContent = L1.length;
-  renderList('');
-  refreshResume();
-  refreshMistakeUI();
+  $('srcName').textContent = VA.source;
+  // 记住上次用的级别
+  var savedLv = parseInt(load('va.curLevel', 1), 10);
+  if (AVAIL.indexOf(savedLv) < 0) savedLv = AVAIL[0] || 1;
+  applyLevel(savedLv);
+  switchTab('quiz');
 })();
 </script>
 </body>

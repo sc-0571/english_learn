@@ -39,6 +39,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-alias.ps1
 | 路径 | 说明 |
 |---|---|
 | `docs/index.html` | **Verbal Advantage 词汇自测网页**（纯静态，详见 `docs/README.md`） |
+| `docs/data.js` | 题库核心 |
+| `docs/data-level1.js` | Level 1 题库（50 词 / 50 题） |
+| `docs/data-level2.js` | Level 2 题库（50 词 / 50 题） |
 | `index.html` | 网页入口（跳转到 `docs/index.html`） |
 | `level1-quiz.md` | Level 1 的 50 道题（Markdown 版，含答案解析） |
 | `backup.ps1` | 备份脚本 |
@@ -48,5 +51,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-alias.ps1
 
 <https://sc-0571.github.io/english_learn/>
 
-仓库为 public，GitHub Pages 从 `main` 分支的 `/docs` 目录发布。
+页面顶部可切换 **Level 1 / Level 2**，两级的进度与错题本各自独立。
+仓库为 public，GitHub Pages 从 `main` 分支发布。
 也可以直接双击本地的 `index.html`，完全离线可用，不需要服务器或联网。
