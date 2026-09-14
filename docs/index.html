@@ -686,7 +686,8 @@
             '</span><span id="progPct">' + Math.round(done / total * 100) + '%</span></div>' +
             '<div class="bar"><i id="progBar" style="width:' + (done / total * 100) + '%"></i></div>' +
             (done < total ? '<p class="dim2" style="margin:6px 0 0">不想做完全部也可以 —— ' +
-              '直接点下面的「提交并批改」，已答的会照常判分，做错的照常进错题本。</p>' : '') +
+              '直接点下面的「提交并批改」，已答的会照常判分，' +
+              '没作答的会按「不会」一起记进错题本。</p>' : '') +
             '</div>';
 
     quiz.parts.forEach(function (p, pi) {
@@ -811,7 +812,7 @@
     }
     var h = '<div class="exp' + (correct ? '' : ' bad') + '">';
     if (!answered) {
-      h += '<span class="tag no">未作答</span>（不计入错题本）· 正确答案：<b>' + esc(ansLabel) + '</b>';
+      h += '<span class="tag no">未作答</span>（按「不会」记入错题本）· 正确答案：<b>' + esc(ansLabel) + '</b>';
     } else if (correct) {
       h += '<span class="tag ok">✓ 正确</span>';
     } else {
@@ -859,7 +860,7 @@
     var delta = quiz.lastDelta || { added: 0, cleared: 0 };
     var left = mistakeKeys().length;
     h += '<p class="dim2" style="margin-top:10px">';
-    if (quiz.skipped) h += '未作答 <b>' + quiz.skipped + '</b> 题（不计入错题本）；';
+    if (quiz.skipped) h += '未作答 <b>' + quiz.skipped + '</b> 题（按「不会」已记入错题本）；';
     if (delta.added) h += '本次新增错题 <b style="color:var(--bad)">' + delta.added + '</b> 题；';
     if (delta.cleared) h += '答对并清出错题本 <b style="color:var(--ok)">' + delta.cleared + '</b> 题；';
     h += '错题本现有 <b>' + left + '</b> 题。';
@@ -942,8 +943,9 @@
   }
 
   function submitQuiz() {
-    // 先检查有没有漏答 —— 没作答不等于答错，不应记进错题本，
-    // 但要让用户有机会回去补完。用页面内弹窗，不用原生 confirm（会被浏览器拦截）。
+    // 先检查有没有漏答。未作答按「不会」处理 → 也会记进错题本，
+    // 所以这里给一次机会回去补完（只是提醒，不是拦截）。
+    // 用页面内弹窗，不用原生 confirm（file:// 下会被浏览器拦截、点了没反应）。
     var unanswered = allItems().filter(function (it) {
       var v = quiz.answers[it.qid];
       return v == null || (typeof v === 'string' && v.trim() === '');
@@ -952,9 +954,10 @@
       var answered = allItems().length - unanswered.length;
       showModal({
         title: '还有 ' + unanswered.length + ' 题没作答',
-        message: '已作答 ' + answered + ' 题，错了的会照常记进错题本。\n' +
-                 '未作答的 ' + unanswered.length + ' 题不计入错题本。\n\n' +
-                 '想只练一部分的话，直接选「就这样交卷」即可。',
+        message: '已作答 ' + answered + ' 题。\n' +
+                 '没作答的 ' + unanswered.length + ' 题会按「不会」处理，一起记进错题本。\n\n' +
+                 '如果只是来不及做完，可以选「就这样交卷」——\n' +
+                 '错题本正好帮你把没掌握的挑出来。',
         buttons: [
           { label: '← 回去补完', onClick: function () {} },
           { label: '就这样交卷', primary: true, onClick: function () { doSubmit(); } }
@@ -1040,10 +1043,11 @@
   }
 
   /* 把一次提交的结果并入错题本。
-     只处理**真正作答了的**题：
-       答对 → 从错题本移除（视为已掌握）
-       答错 → 记入 / 累计 wrongCount
-       没作答 → 完全忽略（既不算错，也不会误清掉已有记录） */
+     没作答 = 不会，所以也要记进错题本（单独标 skipped 便于区分）：
+       答对     → 从错题本移除（视为已掌握）
+       答错     → 记入 / 累计 wrongCount
+       没作答   → 也记入 / 累计，并标记 skipped，便于错题页区分「空着」与「选错」
+     注意：未作答不计入得分，但计入错题本。 */
   function recordResults(items) {
     var m = getMistakes(), now = new Date().toISOString();
     var added = 0, cleared = 0;
@@ -1057,11 +1061,11 @@
       var base = j >= 0 ? mk.slice(j + 2) : mk;
       var v = quiz.answers[it.qid];
       var answered = !(v == null || (typeof v === 'string' && v === ''));
-      if (!answered) return;                 // 跳过没作答的
 
-      if (v === it.answer) {
+      if (answered && v === it.answer) {
         if (m[key]) { delete m[key]; cleared++; }
       } else {
+        // 答错 或 没作答 → 都算不会，进错题本
         if (m[key]) { m[key].wrongCount++; m[key].lastWrong = now; }
         else {
           m[key] = {
@@ -1070,8 +1074,9 @@
           };
           added++;
         }
-        m[key].lastPick = v;                 // 回看这次错选了什么
-        m[key].lastPickText = pickTextOf(it, v); // 错选的可读文字
+        m[key].skipped = !answered;            // 这次是空着还是选错了
+        m[key].lastPick = answered ? v : '';   // 没作答则没有错选内容
+        m[key].lastPickText = answered ? pickTextOf(it, v) : '';
         m[key].answerText = answerTextOf(it); // 记录时的正确答案文字
         m[key].lastQuestion = it.text || it.word ||
           (it.a ? (it.a + ' vs ' + it.b) : '');
@@ -1207,7 +1212,9 @@
           esc(rec.lastPickText || rec.lastPick) + '</b>' +
           ' · 正确答案：<b class="good">' + esc(d.answerText) + '</b></div>';
       } else {
-        html += '<div class="row">正确答案：<b class="good">' + esc(d.answerText) + '</b></div>';
+        // 没作答也算不会，但显示上与「选错」区分开
+        html += '<div class="row"><b class="bad">未作答</b>' +
+          ' · 正确答案：<b class="good">' + esc(d.answerText) + '</b></div>';
       }
       if (d.reason) html += '<div class="src">' + esc(d.reason) + '</div>';
       html += '</div>';
@@ -1346,6 +1353,7 @@
       if (d.sub) L.push('    释义: ' + d.sub);
       L.push('    题目: ' + d.prompt);
       if (rec.lastPick) L.push('    我选了: ' + (rec.lastPickText || rec.lastPick) + '  ← 错的');
+      else L.push('    我选了: （没作答 —— 空着）  ← 不会');
       L.push('    正确答案: ' + d.answerText);
       if (d.reason) L.push('    原书解析: ' + d.reason);
     });

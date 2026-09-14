@@ -273,32 +273,39 @@ const errors = [];
   is($('quizBody').querySelectorAll('.exp').length > 0, '每题都渲染了解析块');
   is($('quizBody').querySelectorAll('.exp.bad').length === 50 - score, '错题解析数 = 50 - 得分');
 
-  console.log('\n=== 5. 只做一小部分就交卷 → 未作答的不算错题 ===');
-  // 真实用户最容易踩的路径：做几题就提交。两个历史 bug 都在这里：
-  //   ① 把 47 道「空题」也记成错题，错题本被塞满 50 条
-  //   ② 用原生 confirm 询问，file:// 下被浏览器静默拦截 → 点提交毫无反应
+  console.log('\n=== 5. 只做一部分就交卷 → 未作答按「不会」记入错题本 ===');
+  // 真实用户最容易踩的路径：做几题就提交。这里锁两件事：
+  //   ① 未作答 = 不会 → 要和答错一样记进错题本（用户明确要求）
+  //   ② 确认框必须是**页面内**自绘的 —— 原生 confirm 在 file:// 下被浏览器
+  //      静默拦截，会导致点「提交并批改」毫无反应（曾经的真实故障）
   $('btnAgain').dispatchEvent(new win.Event('click', { bubbles: true }));
   const sparseWord = $('quizBody').querySelector('.aword').textContent.trim();
-  answerWrongA(sparseWord);                     // 只故意答错这一题，其余全空着
+  answerWrongA(sparseWord);                     // 只答错这一题，其余 49 题空着
   $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
 
-  // ② 必须出现**页面内**弹窗（而不是依赖 window.confirm）
   is(!!modal(), '漏答时弹出页面内确认框（不依赖原生 confirm）');
-  is(modalText().indexOf('49') >= 0 || modalText().indexOf('题没作答') >= 0,
-     '弹窗说明了未作答题数: ' + modalText().split('\n')[0]);
+  is(modalText().indexOf('49') >= 0, '弹窗说明了未作答题数: ' + modalText().split('\n')[0]);
+  is(modalText().indexOf('记进错题本') >= 0, '弹窗说明未作答会记进错题本');
   is($('quizBody').querySelectorAll('.exp').length === 0, '弹窗未确认前不进入批改状态');
   clickModal('交卷');                           // 选「就这样交卷」
   is(!modal(), '点「就这样交卷」后弹窗关闭');
 
   const sp = myMistakes(1);
-  is(Object.keys(sp).length === 1,
-     '只答错 1 题 → 错题本只有 1 题（实际 ' + Object.keys(sp).length + '）');
-  is(bareKey(Object.keys(sp)[0]) === sparseWord, '记录的正是那一题: ' + bareKey(Object.keys(sp)[0]));
-  is(Object.keys(sp)[0] === '1:A::' + sparseWord,
-     '存储键 = 级别前缀 + Part 前缀 + 裸 key（实际 ' + Object.keys(sp)[0] + '）');
-  is($('revBadge').textContent === '1', '角标是 1 而不是 50（实际 ' + $('revBadge').textContent + '）');
+  is(Object.keys(sp).length === 50,
+     '未作答的 49 题 + 答错的 1 题 全部进错题本（实际 ' + Object.keys(sp).length + ' 条）');
+  is(!!sp['1:A::' + sparseWord], '答错的那题有记录: 1:A::' + sparseWord);
+  is(sp['1:A::' + sparseWord].skipped === false, '答错的记录 skipped=false');
+  // 抽查一条未作答的记录
+  const skipKey = Object.keys(sp).find((k) => k !== '1:A::' + sparseWord);
+  is(!!skipKey && sp[skipKey].skipped === true, '未作答的记录 skipped=true（' + skipKey + '）');
+  is(!!skipKey && sp[skipKey].lastPick === '', '未作答的记录没有「错选」内容');
+  is(!!skipKey && !!sp[skipKey].answerText, '未作答的记录仍存下了正确答案');
+  is($('revBadge').textContent === '50', '角标显示 50（实际 ' + $('revBadge').textContent + '）');
   is($('quizBody').textContent.indexOf('未作答') >= 0, '结果页标明有题未作答');
-  is($('quizBody').textContent.indexOf('不计入错题本') >= 0, '结果页说明未作答不计入错题本');
+  is($('quizBody').textContent.indexOf('已记入错题本') >= 0, '结果页说明未作答已记入错题本');
+  // 得分不能把未作答算对
+  const sparseScore = parseInt($('quizBody').querySelector('.ring .n').textContent, 10);
+  is(sparseScore === 0, '得分不把未作答算对（0/50，实际 ' + sparseScore + '）');
 
   console.log('\n=== 5b. 错题记录的「正确答案」必须与被考的词对应 ===');
   // 曾经的 bug：Part A 选项字母在渲染时被重映射，错题本却拿原始选项表查文字，
@@ -738,6 +745,78 @@ const errors = [];
   is(!!dm['2:D::' + dupWord], 'D 的记录也存在: 2:D::' + dupWord);
   is(Object.keys(dm).length === 2, '两条记录并存、互不覆盖（实际 ' + Object.keys(dm).length + ' 条）');
   is(partOf('2:A::' + dupWord) === 'A' && partOf('2:D::' + dupWord) === 'D', 'Part 前缀解析正确');
+
+  console.log('\n=== 20. 未作答的题能在错题页看到、也能重测学会 ===');
+  // 用户要求：没作答 = 不会，要进错题本。这里验证整条闭环：
+  // 只答 1 题 → 交卷 → 错题本 50 条（其中 49 条标为「未作答」）
+  //          → 错题页显示「未作答」→ 重测这 49 题并全答对 → 错题本清空
+  win.localStorage.setItem('va.l1.mistakes', '{}');
+  sel2.value = '1';
+  sel2.dispatchEvent(new win.Event('change', { bubbles: true }));
+  switchTo('quiz');
+  $('btnStart').dispatchEvent(new win.Event('click', { bubbles: true }));
+  fillCorrect();                                  // 先全对，确保只有我们主动空着的才算错
+  // 把前 49 题清空（只留 1 题答对），模拟「只做了一题」
+  const allSel = $('quizBody').querySelectorAll('select');
+  Array.prototype.forEach.call(allSel, (s, i) => {
+    if (i === 0) return;                          // 第 1 题保留正确
+    s.value = '';
+    s.dispatchEvent(new win.Event('change', { bubbles: true }));
+  });
+  // 单选：把每组都顶到一个非正确答案上；然后再把整个组取消勾选并触发一次
+  // 值为空的 change，确保 App 的 answers 里确实变回「未作答」
+  const allRadios = $('quizBody').querySelectorAll('input[type=radio]');
+  const seenGroup = {};
+  Array.prototype.forEach.call(allRadios, (r) => {
+    if (seenGroup[r.name]) return;
+    seenGroup[r.name] = 1;
+    const group = Array.prototype.slice.call(allRadios).filter((x) => x.name === r.name);
+    const other = group.find((x) => !x.checked) || group[0];
+    group.forEach((x) => { x.checked = false; });
+    other.checked = true;
+    other.dispatchEvent(new win.Event('change', { bubbles: true }));
+  });
+  // 再整体取消勾选，并用空值触发，让 App 记为未作答
+  Array.prototype.forEach.call(allRadios, (r) => {
+    r.checked = false;
+    r.value = '';
+    r.dispatchEvent(new win.Event('change', { bubbles: true }));
+    r.value = r.getAttribute('value') || '';
+  });
+  Array.prototype.forEach.call($('quizBody').querySelectorAll('input[type=text]'), (inp) => {
+    inp.value = '';
+    inp.dispatchEvent(new win.Event('input', { bubbles: true }));
+  });
+  $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
+  if (modal()) clickModal('交卷');
+  const m20 = myMistakes(1);
+  is(Object.keys(m20).length === 49, '49 道空题全部进错题本（实际 ' + Object.keys(m20).length + '）');
+  const skippedN = Object.keys(m20).filter((k) => m20[k].skipped).length;
+  is(skippedN === 49, '其中 49 条标记为 skipped（实际 ' + skippedN + '）');
+
+  // 错题页要能看出是「未作答」
+  switchTo('review');
+  is($('reviewList').textContent.indexOf('未作答') >= 0, '错题页把空题显示成「未作答」');
+  is($('reviewList').querySelectorAll('.mist').length === 49, '错题页渲染 49 张卡片');
+
+  // 报告里也要写清楚是空着的
+  $('btnExport').dispatchEvent(new win.Event('click', { bubbles: true }));
+  is($('reportText').value.indexOf('没作答') >= 0, '报告里注明是「没作答」');
+  is($('reportText').value.indexOf('undefined') < 0, '报告里没有 undefined');
+
+  // 重测这 49 题并全答对 → 清空
+  switchTo('quiz');
+  $('btnRetest').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const rtSel = $('quizBody').querySelectorAll('select').length;
+  const rtRad = $('quizBody').querySelectorAll('input[type=radio]').length;
+  const rtTxt = $('quizBody').querySelectorAll('input[type=text]').length;
+  is(rtSel + rtRad / 3 + rtTxt > 0, '重测出题正常（A=' + rtSel + ' 单选=' + rtRad + ' C=' + rtTxt + '）');
+  const rtFilled = fillCorrect();
+  is(rtFilled > 0, '重测中填入正确答案 ' + rtFilled + ' 题');
+  $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
+  if (modal()) clickModal('交卷');
+  const m20b = myMistakes(1);
+  is(Object.keys(m20b).length === 0, '重测全对后错题本清空（实际 ' + Object.keys(m20b).length + '）');
 
   console.log('\n' + '='.repeat(52));
   console.log(fail === 0 ? 'DOM 冒烟测试全部通过。' : fail + ' 项失败。');
