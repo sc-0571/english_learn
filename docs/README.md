@@ -16,16 +16,20 @@
 
 ## 级别
 
-页面顶部有「级别」下拉框，可切换 **Level 1 / 2 / 3**（各 50 个 keyword）。
-Level 4–10 显示为「待补」并禁用。
+页面顶部有「级别」下拉框，可切换 **Level 1 – Level 5**（各级 50 个 keyword）。
+Level 6–10 显示为「待补」并禁用。
 
 | 级别 | 词数 | 题数 | 结构 |
 |---|---|---|---|
 | Level 1 | 50 | 50 | 连线段 A=20 + 同反义 10 + 填空 10 + 辨析 10 |
 | Level 2 | 50 | 50 | 同上 |
 | Level 3 | 50 | **87** | **3 个连线段（A/A2/A3）共 50 题** + 同反义 15 + 填空 12 + 辨析 10 |
+| Level 4 | 50 | **87** | 同 Level 3 |
+| Level 5 | 50 | **87** | 同 Level 3 |
 
-> Level 1/2 只对其中 20 个词出连线题（沿用原先的设计）；Level 3 起 50 个词全部进连线段。
+**合计 5 级、250 个词、361 道题。**
+
+> Level 1/2 只对其中 20 个词出连线题（沿用原先的设计）；**Level 3–5 的 50 个词全部进连线段**（覆盖率 100%）。
 > 连线段可以有多段（id 用 `A` / `A2` / `A3`…），每段各自用 A..T 编号。
 
 **各级的进度、单词卡「已掌握」标记、错题本都是分开存的**，互不干扰；
@@ -70,9 +74,11 @@ docs/data.js          题库核心：VA.registerLevel / matchChoices / matchKeyO
 docs/data-level1.js   Level 1 数据（Word 1–50）
 docs/data-level2.js   Level 2 数据（Word 51–100）
 docs/data-level3.js   Level 3 数据（Word 101–150，含 3 个连线段）
+docs/data-level4.js   Level 4 数据（Word 151–200，含 3 个连线段）
+docs/data-level5.js   Level 5 数据（Word 201–250，含 3 个连线段）
 docs/verify.js        数据自检（纯 node，无依赖）
 docs/dom-test.js      jsdom 冒烟测试（Level 1/2 全流程）
-docs/test-level3.js   jsdom 测试（Level 3 多连线段专用）
+docs/test-level3.js   jsdom 测试（多连线段级别；默认自动测全部，可传级别号）
 ```
 
 ## 跑测试
@@ -81,14 +87,18 @@ docs/test-level3.js   jsdom 测试（Level 3 多连线段专用）
 # 1) 数据自检：逐级检查单词表、答案合法性、matchChoices 映射、matchKey 唯一性
 node docs/verify.js
 
-# 2) 应用冒烟测试：真实加载页面，走完两级的判分与错题本流程
+# 2) 应用冒烟测试：真实加载页面，走完 Level 1/2 的判分与错题本流程
 cd docs
 node "C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js" install --no-save jsdom@24
 cd ..
 node docs/dom-test.js
+
+# 3) 多连线段级别（3/4/5）的端到端测试：默认自动测全部，也可指定级别
+node docs/test-level3.js
+node docs/test-level3.js 4
 ```
 
-两个脚本都以退出码 0 表示通过。`dom-test.js` 覆盖 22 组、169 条断言，包括：
+三个脚本都以退出码 0 表示通过。`dom-test.js` 覆盖 24 组、约 200 条断言，包括：
 
 - 四个部分全部答对 → 50/50；全部答错 → 错题本 50 条且答案文字逐条对得上
 - 只做几题就交卷 → 未作答的当「不会」记入错题本（49 道空题 → 49 条记录，且 `skipped=true`）

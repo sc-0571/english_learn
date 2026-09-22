@@ -70,8 +70,8 @@ const errors = [];
 
   console.log('\n=== 1. 脚本加载与初始化 ===');
   is(!!win.VA && typeof win.VA.getLevel === 'function', 'data.js 已加载（VA API 存在）');
-  is(win.VA.availableLevels().join(',') === '1,2,3',
-     '已注册 Level 1–3（实际 ' + win.VA.availableLevels().join(',') + '）');
+  is(win.VA.availableLevels().join(',') === '1,2,3,4,5',
+     '已注册 Level 1–5（实际 ' + win.VA.availableLevels().join(',') + '）');
   is(!!$('wl') && $('wl').querySelectorAll('details').length === 50,
      '词汇表渲染出 50 个条目（实际 ' + $('wl').querySelectorAll('details').length + '）');
   is($('srcName').textContent.indexOf('Verbal') >= 0, '页脚数据来源已填充');
@@ -788,7 +788,9 @@ const errors = [];
   const opt3 = Array.from(sel2.options).find((o) => o.value === '3');
   is(!!opt3 && !opt3.disabled, 'Level 3 可选（已注册）');
   const opt4 = Array.from(sel2.options).find((o) => o.value === '4');
-  is(!!opt4 && opt4.disabled, 'Level 4 显示为「待补」且禁用');
+  is(!!opt4 && !opt4.disabled, 'Level 4 可选（已注册）');
+  const opt6 = Array.from(sel2.options).find((o) => o.value === '6');
+  is(!!opt6 && opt6.disabled, 'Level 6 显示为「待补」且禁用');
   is(opt2.textContent.indexOf('待补') < 0, 'Level 2 的选项文字没有「待补」');
 
   switchTo('quiz');
