@@ -408,6 +408,13 @@
     if ($('wlSearch')) $('wlSearch').value = '';
     levelUi();
     fcState.known = load(kKnown(), {});
+    // 单词卡也要跟着换级别重新构建。
+    // 之前这里漏了 rebuild，导致切级别后卡片还是上一级的词
+    // （只有首次 initCards() 会构建，或手动点一次「单词卡」标签才刷新）。
+    fcState.idx = 0;
+    fcState.flipped = {};
+    buildFcOrder();
+    renderGrid();
     renderList('');
     refreshResume();
     // 回到测验页，清掉上一级的作答

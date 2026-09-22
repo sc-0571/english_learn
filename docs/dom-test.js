@@ -680,6 +680,50 @@ const errors = [];
      '取消勾选后总数回到 50（实际 ' + $('fcPos').textContent + '）');
   is(cardsOf().length === 10, '一屏仍是 10 张');
 
+  console.log('\n=== 12f. 切级别后单词卡要立刻换成该级别的词 ===');
+  // 曾经的 bug：applyLevel() 里漏了重建卡片顺序，导致停在「单词卡」标签时
+  // 切级别后卡片还是上一级的词（只有首次 initCards 或手动点一次标签才刷新）。
+  // 注意：切级别会重置「测验」页状态，所以这一段自己准备好前后状态。
+  switchTo('cards');
+  const wordsOfLv = (lv) => new Set(win.VA.getLevel(lv).words.filter((w) => !w.extra).map((w) => w.word));
+  const cardWordsNow = () => Array.from($('fcGrid').querySelectorAll('.cardx')).map((c) => c.getAttribute('data-w'));
+  const lv1set = wordsOfLv(1), lv3set = wordsOfLv(3);
+  is(cardWordsNow().every((w) => lv1set.has(w)), 'Level 1 卡片是 Level 1 的词');
+
+  const lvSel = $('levelSelect');
+  lvSel.value = '3';
+  lvSel.dispatchEvent(new win.Event('change', { bubbles: true }));
+  const afterSwitch = cardWordsNow();
+  is(afterSwitch.length === 10, '切到 Level 3 后仍是 10 张（实际 ' + afterSwitch.length + '）');
+  is(afterSwitch.every((w) => lv3set.has(w)),
+     '卡片立刻换成 Level 3 的词（例: ' + afterSwitch.slice(0, 3).join(',') + '）');
+  is(afterSwitch.every((w) => !lv1set.has(w)), '没有残留 Level 1 的词');
+  const backZh = $('fcGrid').querySelector('.cardx .f-back .zh');
+  is(!!backZh && backZh.textContent.trim() === win.VA.wordOf(3, afterSwitch[0]).zh,
+     '卡背释义也对应该级别: ' + (backZh ? backZh.textContent.trim() : '无'));
+  is($('fcTotal').textContent === '50', '单词卡总数仍是 50');
+
+  // 切回 Level 1，并把卡片与搜索框恢复成后续用例期望的状态
+  lvSel.value = '1';
+  lvSel.dispatchEvent(new win.Event('change', { bubbles: true }));
+  is(cardWordsNow().every((w) => lv1set.has(w)), '切回 Level 1 后卡片也立刻换回');
+  $('fcUnmastered').checked = false;
+  $('fcUnmastered').dispatchEvent(new win.Event('change', { bubbles: true }));
+  is(/\/ 50$/.test($('fcPos').textContent), '恢复为「查看全部 50 词」（实际 ' + $('fcPos').textContent + '）');
+
+  // 切级别会重置「测验」页，所以后面第 15 段需要一个已批改的测验；
+  // 这里顺手造一个：开测验 → 只答一题提交 → 处于已批改状态
+  console.log('\n=== 12g. 为后续用例重新准备一个已批改的测验 ===');
+  switchTo('quiz');
+  $('btnStart').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const prepWord = $('quizBody').querySelector('.aword').textContent.trim();
+  answerWrongA(prepWord);
+  $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
+  if (modal()) clickModal('交卷');       // 其余空着 → 未作答也进错题本
+  is(!!$('btnAgain'), '已备好一个已批改的测验（可点「再测一次」）');
+  is(Object.keys(myMistakes(1)).length > 0, 'Level 1 错题本已重新有记录（' +
+     Object.keys(myMistakes(1)).length + ' 条），供后面验证独立性');
+
   console.log('\n=== 13. 词汇表搜索 ===');
   switchTo('list');
   const search = $('wlSearch');
@@ -704,6 +748,8 @@ const errors = [];
      'index.html 源码里没有原生 confirm/alert/prompt 调用（发现 ' +
      nativeCalls.length + ' 处' + (nativeCalls.length ? ': ' + nativeCalls.join(' ') : '') + '）');
   is(htmlSrc.indexOf('function showModal') >= 0, '存在页面内自绘弹窗 showModal()');
+  // 12g 已经备好一个已批改的测验，这里应能直接拿到「再测一次」
+  is(!!$('btnAgain'), '已就绪：测验处于已批改状态');
   // 更强的验证：把原生对话框换成「一调用就抛错」，然后完整走一遍
   // 需要确认的路径（漏答提交 / 清空错题本）。只要 App 碰了原生对话框就会炸。
   let nativeHit = '';
