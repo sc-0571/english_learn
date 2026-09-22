@@ -70,8 +70,8 @@ const errors = [];
 
   console.log('\n=== 1. 脚本加载与初始化 ===');
   is(!!win.VA && typeof win.VA.getLevel === 'function', 'data.js 已加载（VA API 存在）');
-  is(win.VA.availableLevels().join(',') === '1,2',
-     '已注册 Level 1 与 Level 2（实际 ' + win.VA.availableLevels().join(',') + '）');
+  is(win.VA.availableLevels().join(',') === '1,2,3',
+     '已注册 Level 1–3（实际 ' + win.VA.availableLevels().join(',') + '）');
   is(!!$('wl') && $('wl').querySelectorAll('details').length === 50,
      '词汇表渲染出 50 个条目（实际 ' + $('wl').querySelectorAll('details').length + '）');
   is($('srcName').textContent.indexOf('Verbal') >= 0, '页脚数据来源已填充');
@@ -79,10 +79,16 @@ const errors = [];
   is($('levelSelect').options.length === 10, '级别下拉框有 10 个选项');
   is($('levelSelect').value === '1', '默认停在 Level 1');
 
+  // 始终按 App 当前的级别取数据 —— 不要用固定变量，
+  // 否则切级别后辅助函数会拿错级别的词表（曾因此让 fillCorrect 少填 20 题）
+  const curDef = () => win.VA.getLevel(parseInt($('levelSelect').value, 10) || 1);
   // 取当前级别（Level 1）的各级数据，供后面构造答案用
   let CUR_DEF = win.VA.getLevel(1);
   let A = CUR_DEF.parts.A, B = CUR_DEF.parts.B, C = CUR_DEF.parts.C, D = CUR_DEF.parts.D;
   let MATCH = win.VA.matchChoices(1);          // Part A 的 [{key,text,answer}]
+  // 从 DOM 的 data-qid 里取 Part id（形如 "B_3" → "B"）
+  const pidOfQid = q => String(q).split('_')[0];
+  const idxOfQid = q => parseInt(String(q).split('_')[1], 10);
 
   console.log('\n=== 2. 开始测验 ===');
   $('btnStart').dispatchEvent(new win.Event('click', { bubbles: true }));
@@ -134,34 +140,44 @@ const errors = [];
   };
   const myMistakes = (lv) => JSON.parse(win.localStorage.getItem('va.l' + (lv || 1) + '.mistakes') || '{}');
 
-  /* 把当前这套测验全部填上正确答案；exceptMatchKey 指定的 Part A 词跳过。 */
+  /* 把当前这套测验全部填上正确答案；exceptMatchKey 指定的连线词跳过。
+     逐段处理：每段各自用 A..T 编号，不能把不同段的字母混在一起查。 */
   function fillCorrect(exceptMatchKey) {
     let n = 0;
-    Array.prototype.forEach.call($('quizBody').querySelectorAll('select'), (sel) => {
-      const word = sel.closest('.arow').querySelector('.aword').textContent.trim();
-      if (word === exceptMatchKey) return;
-      const mc = aAnswerOf(word);
-      if (!mc) return;
-      const wantText = mc.text;
-      const opt = Array.prototype.slice.call(sel.options)
-        .find((o) => o.value && o.textContent.replace(/^[A-Z]\.\s*/, '') === wantText);
-      if (!opt) return;
-      sel.value = opt.value;
-      sel.dispatchEvent(new win.Event('change', { bubbles: true }));
-      n++;
+    // 连线：逐段处理，用该段渲染出来的选项表按「释义文字」反查
+    Array.from($('quizBody').querySelectorAll('.card')).forEach((card) => {
+      if (!card.querySelector('.arow')) return;
+      Array.prototype.forEach.call(card.querySelectorAll('.arow'), (row) => {
+        const word = row.querySelector('.aword').textContent.trim();
+        if (word === exceptMatchKey) return;
+        const want = (curDef().byWord[word] || {}).zh;
+        const sel = row.querySelector('select');
+        const opt = Array.from(sel.options)
+          .find((o) => o.value && o.textContent.replace(/^[A-Z]\.\s*/, '') === want);
+        if (!opt) return;
+        sel.value = opt.value;
+        sel.dispatchEvent(new win.Event('change', { bubbles: true }));
+        n++;
+      });
     });
+    // 单选（B / D 及以后新增的 choice 段）
     Array.prototype.forEach.call($('quizBody').querySelectorAll('input[type=radio]'), (radio) => {
-      const m = /^([BD])(\d+)$/.exec(radio.name || '');
-      if (!m) return;
-      const src = m[1] === 'B' ? B.items : D.items;
-      const it = src[parseInt(m[2], 10)];
+      const pid = pidOfQid(radio.name);
+      const def = curDef().parts[pid];
+      if (!def) return;
+      const it = def.items[idxOfQid(radio.name)];
       if (!it || radio.value !== it.answer) return;
       radio.checked = true;
       radio.dispatchEvent(new win.Event('change', { bubbles: true }));
       n++;
     });
+    // 填空（C 及以后新增的 bank 段）
     Array.prototype.forEach.call($('quizBody').querySelectorAll('input[type=text]'), (inp) => {
-      const it = C.items[parseInt(String(inp.getAttribute('data-qid')).replace(/^C/, ''), 10)];
+      const q = inp.getAttribute('data-qid');
+      const pid = pidOfQid(q);
+      const def = curDef().parts[pid];
+      if (!def) return;
+      const it = def.items[idxOfQid(q)];
       if (!it) return;
       inp.value = it.answer;
       inp.dispatchEvent(new win.Event('input', { bubbles: true }));
@@ -174,30 +190,32 @@ const errors = [];
      返回每题 { qid, ok, expectAnswerText } —— expectAnswerText 是这题真正该显示的答案。 */
   function fillAllWrong() {
     const info = [];
-    // Part A
-    Array.prototype.forEach.call($('quizBody').querySelectorAll('select'), (sel) => {
-      const word = sel.closest('.arow').querySelector('.aword').textContent.trim();
-      const mc = aAnswerOf(word);
-      if (!mc) return;
-      const wantText = mc.text;
-      const badOpt = Array.prototype.slice.call(sel.options)
-        .find((o) => o.value && o.textContent.replace(/^[A-Z]\.\s*/, '') !== wantText);
-      if (!badOpt) return;
-      sel.value = badOpt.value;
-      sel.dispatchEvent(new win.Event('change', { bubbles: true }));
-      info.push({ qid: sel.getAttribute('data-qid'), part: 'A', word,
-        expectAnswer: mc.answer + '. ' + wantText });
+    // 连线段：逐段挑一个错误释义
+    Array.from($('quizBody').querySelectorAll('.card')).forEach((card) => {
+      if (!card.querySelector('.arow')) return;
+      Array.prototype.forEach.call(card.querySelectorAll('.arow'), (row) => {
+        const word = row.querySelector('.aword').textContent.trim();
+        const want = (curDef().byWord[word] || {}).zh;
+        const sel = row.querySelector('select');
+        const badOpt = Array.from(sel.options)
+          .find((o) => o.value && o.textContent.replace(/^[A-Z]\.\s*/, '') !== want);
+        if (!badOpt) return;
+        sel.value = badOpt.value;
+        sel.dispatchEvent(new win.Event('change', { bubbles: true }));
+        info.push({ qid: sel.getAttribute('data-qid'), part: 'A', word,
+          expectAnswer: want });
+      });
     });
-    // Part B / D
+    // 单选段（B / D…）
     const byGroup = {};
     Array.prototype.forEach.call($('quizBody').querySelectorAll('input[type=radio]'), (r) => {
       (byGroup[r.name] = byGroup[r.name] || []).push(r);
     });
     Object.keys(byGroup).forEach((name) => {
-      const m = /^([BD])(\d+)$/.exec(name);
-      if (!m) return;
-      const src = m[1] === 'B' ? B.items : D.items;
-      const it = src[parseInt(m[2], 10)];
+      const pid = pidOfQid(name);
+      const def = curDef().parts[pid];
+      if (!def) return;
+      const it = def.items[idxOfQid(name)];
       if (!it) return;
       const wrong = byGroup[name].find((r) => r.value !== it.answer);
       if (!wrong) return;
@@ -205,32 +223,34 @@ const errors = [];
       wrong.dispatchEvent(new win.Event('change', { bubbles: true }));
       const opts = it.choices || it.options || [];
       const ch = opts.find((c) => c.k === it.answer);
-      info.push({ qid: name, part: m[1],
+      info.push({ qid: name, part: pid,
         word: it.lookup || it.word || (it.a + ' vs ' + it.b),
-        expectAnswer: it.answer + '. ' + (ch ? ch.t : '') });
+        expectAnswer: (ch ? ch.t : it.answer) });
     });
-    // Part C —— 故意写一个不属于词库的词
+    // 填空段（C…）—— 故意写一个不属于词库的词
     Array.prototype.forEach.call($('quizBody').querySelectorAll('input[type=text]'), (inp) => {
       const qid = String(inp.getAttribute('data-qid'));
-      const it = C.items[parseInt(qid.replace(/^C/, ''), 10)];
+      const pid = pidOfQid(qid);
+      const def = curDef().parts[pid];
+      if (!def) return;
+      const it = def.items[idxOfQid(qid)];
       if (!it) return;
       inp.value = 'zzz-not-a-word';
       inp.dispatchEvent(new win.Event('input', { bubbles: true }));
-      info.push({ qid, part: 'C', word: it.text, expectAnswer: it.answer });
+      info.push({ qid, part: pid, word: it.text, expectAnswer: it.answer });
     });
     return info;
   }
 
-  /* 给某个 Part A 的词故意选一个错误选项 */
+  /* 给某个连线词故意选一个错误选项 */
   function answerWrongA(matchKey) {
-    const row = Array.prototype.slice.call($('quizBody').querySelectorAll('.arow'))
+    const row = Array.from($('quizBody').querySelectorAll('.arow'))
       .find((r) => r.querySelector('.aword').textContent.trim() === matchKey);
     if (!row) return false;
+    const wantText = (curDef().byWord[matchKey] || {}).zh;
+    if (!wantText) return false;
     const sel = row.querySelector('select');
-    const mc = aAnswerOf(matchKey);
-    if (!mc) return false;
-    const wantText = mc.text;
-    const bad = Array.prototype.slice.call(sel.options).find((o) =>
+    const bad = Array.from(sel.options).find((o) =>
       o.value && o.textContent.replace(/^[A-Z]\.\s*/, '') !== wantText);
     if (!bad) return false;
     sel.value = bad.value;
@@ -720,7 +740,9 @@ const errors = [];
   const opt2 = Array.from(sel2.options).find((o) => o.value === '2');
   is(!!opt2 && !opt2.disabled, 'Level 2 可选（未被禁用）');
   const opt3 = Array.from(sel2.options).find((o) => o.value === '3');
-  is(!!opt3 && opt3.disabled, 'Level 3 显示为「待补」且禁用');
+  is(!!opt3 && !opt3.disabled, 'Level 3 可选（已注册）');
+  const opt4 = Array.from(sel2.options).find((o) => o.value === '4');
+  is(!!opt4 && opt4.disabled, 'Level 4 显示为「待补」且禁用');
   is(opt2.textContent.indexOf('待补') < 0, 'Level 2 的选项文字没有「待补」');
 
   switchTo('quiz');
@@ -746,43 +768,8 @@ const errors = [];
   is(l2words.filter((w) => l1Only.indexOf(w) >= 0).length === 0, 'Part A 里没有混进 Level 1 的词');
 
   console.log('\n=== 17. Level 2 判分与错题本 ===');
-  // 自动答对 Level 2 的 50 题
-  function fillCorrectL2(exceptWord) {
-    let n = 0;
-    const txt = {};
-    L2MATCH.forEach((c) => { txt[c.key] = c.text; });
-    Array.prototype.forEach.call($('quizBody').querySelectorAll('select'), (sel) => {
-      const word = sel.closest('.arow').querySelector('.aword').textContent.trim();
-      if (word === exceptWord) return;
-      const idx = L2A.items.map((x) => x.word).indexOf(word);
-      if (idx < 0) return;
-      const want = txt[L2MATCH[idx].key];
-      const o = Array.prototype.slice.call(sel.options)
-        .find((x) => x.value && x.textContent.replace(/^[A-Z]\.\s*/, '') === want);
-      if (!o) return;
-      sel.value = o.value;
-      sel.dispatchEvent(new win.Event('change', { bubbles: true }));
-      n++;
-    });
-    Array.prototype.forEach.call($('quizBody').querySelectorAll('input[type=radio]'), (r) => {
-      const m = /^([BD])(\d+)$/.exec(r.name || '');
-      if (!m) return;
-      const src = m[1] === 'B' ? L2B.items : L2D.items;
-      const it = src[parseInt(m[2], 10)];
-      if (!it || r.value !== it.answer) return;
-      r.checked = true;
-      r.dispatchEvent(new win.Event('change', { bubbles: true }));
-      n++;
-    });
-    Array.prototype.forEach.call($('quizBody').querySelectorAll('input[type=text]'), (inp) => {
-      const it = L2C.items[parseInt(String(inp.getAttribute('data-qid')).replace(/^C/, ''), 10)];
-      if (!it) return;
-      inp.value = it.answer;
-      inp.dispatchEvent(new win.Event('input', { bubbles: true }));
-      n++;
-    });
-    return n;
-  }
+  // 用同一个（按级别走的）辅助函数填对 Level 2 的 50 题
+  const fillCorrectL2 = (exceptWord) => fillCorrect(exceptWord);
   const l2filled = fillCorrectL2();
   is(l2filled === 50, 'Level 2 自动填答覆盖 50 题（实际 ' + l2filled + '）');
   $('btnSubmit').dispatchEvent(new win.Event('click', { bubbles: true }));
@@ -852,9 +839,9 @@ const errors = [];
     .find((o) => o.value && o.textContent.replace(/^[A-Z]\.\s*/, '') !== wantA);
   sa.value = badA.value;
   sa.dispatchEvent(new win.Event('change', { bubbles: true }));
-  // D 里也答错这个词
+  // D 里也答错这个词（qid 形如 "D_3"）
   const dIdx = L2D.items.map((x) => x.lookup || x.word).indexOf(dupWord);
-  const dRadio = $('quizBody').querySelector('input[name="D' + dIdx + '"]:not(:checked)');
+  const dRadio = $('quizBody').querySelector('input[name="D_' + dIdx + '"]:not(:checked)');
   if (dRadio) {
     dRadio.checked = true;
     dRadio.dispatchEvent(new win.Event('change', { bubbles: true }));

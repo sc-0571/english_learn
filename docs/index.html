@@ -387,6 +387,7 @@
 <script src="data.js"></script>
 <script src="data-level1.js"></script>
 <script src="data-level2.js"></script>
+<script src="data-level3.js"></script>
 <script>
 (function () {
   'use strict';
@@ -582,12 +583,17 @@
     VA.partsOf(CUR).forEach(function (p) { defs[p.id] = p; });
     var parts = [];
 
-    /* Part A —— 词义连线。重测时只保留错过的词，并重新分配选项字母 */
-    var defA = defs.A;
-    if (defA) {
-      var allA = VA.matchChoices(CUR);     // [{key,text,answer}]，key 与 items 索引对应
-      var aSrc = defA.items.filter(function (it) { return inSet('A', it); });
-      if (aSrc.length) {
+    /* 词义连线段（A / A2 / A3 …）。重测时只保留错过的词，并重新分配选项字母。
+       注意：整套测验所有连线题共用一个 qid 前缀 'A'，但 matchKey 用的是
+       各段自己的 partId，所以不会互相覆盖。 */
+    var aSeq = 0;
+    Object.keys(defs).filter(function (k) { return defs[k].type === 'match'; })
+      .forEach(function (pid) {
+        var defA = defs[pid];
+        var allA = VA.matchChoices(CUR, pid);   // [{key,text,answer}]
+        var aSrc = defA.items.filter(function (it) { return inSet(pid, it); });
+        if (!aSrc.length) return;
+        aSeq++;
         // 取出用到的释义，打乱后重新编号 A、B、C…
         var used = {};
         aSrc.forEach(function (it) { used[it.answer] = 1; });
@@ -598,76 +604,61 @@
         var finalChoices = shuffled.map(function (c) {
           return { key: remap[c.key], text: c.text };
         });
+        var tag = 'A' + aSeq;                   // 用于 qid，避免多段冲突
         parts.push({
-          id: 'A', title: defA.title, instruction: defA.instruction,
+          id: pid, title: defA.title, instruction: defA.instruction,
           type: 'match', choices: finalChoices,
           items: shuffle(aSrc).map(function (it, i) {
             return {
-              qid: 'A' + i, matchKey: matchKeyOf('A', it), word: it.word,
-              answer: remap[it.answer], srcAnswer: it.answer
+              qid: tag + '_' + i, matchKey: matchKeyOf(pid, it), word: it.word,
+              answer: remap[it.answer], srcAnswer: it.answer,
+              matchPartId: pid
             };
           })
         });
-      }
-    }
+      });
 
-    /* Part B —— 题目顺序保持原书顺序（顺序本身有难度递进），只打乱选项 */
-    var defB = defs.B;
-    if (defB) {
-      var bSrc = defB.items.filter(function (it) { return inSet('B', it); });
-      if (bSrc.length) {
-        parts.push({
-          id: 'B', title: defB.title, instruction: defB.instruction,
-          type: 'choice',
-          items: bSrc.map(function (it, i) {
-            return {
-              qid: 'B' + i, matchKey: matchKeyOf('B', it), a: it.a, b: it.b,
-              answer: it.answer, reason: it.reason, choices: defB.options
-            };
-          })
-        });
-      }
-    }
+    /* 其余段（B 同反义 / C 选词填空 / D 近义辨析…）通用处理。
+       题目保持原书顺序（顺序本身有难度递进），只打乱选项。 */
+    Object.keys(defs)
+      .filter(function (k) { return defs[k].type !== 'match'; })
+      .sort()
+      .forEach(function (pid) {
+        var def = defs[pid];
+        var isBank = def.type === 'bank';
+        var src = def.items.filter(function (it) { return inSet(pid, it); });
+        if (!src.length) return;
 
-    /* Part C —— 选词填空。重测时词库收窄到这些题答案涉及的词 */
-    var defC = defs.C;
-    if (defC) {
-      var cSrc = defC.items.filter(function (it) { return inSet('C', it); });
-      if (cSrc.length) {
-        var bank = defC.bank.filter(function (w) {
-          return cSrc.some(function (it) { return it.answer === w; });
-        });
-        parts.push({
-          id: 'C', title: defC.title, instruction: defC.instruction,
-          type: 'bank', bank: shuffle(bank),
-          items: cSrc.map(function (it, i) {
-            return {
-              qid: 'C' + i, matchKey: matchKeyOf('C', it), text: it.text,
-              answer: it.answer, hint: it.hint, reason: it.reason
+        var out = {
+          id: pid, title: def.title, instruction: def.instruction, type: def.type,
+          items: src.map(function (it, i) {
+            var base = {
+              qid: pid + '_' + i, matchKey: matchKeyOf(pid, it),
+              answer: it.answer, reason: it.reason
             };
+            if (isBank) {
+              base.text = it.text;
+              if (it.hint) base.hint = it.hint;
+            } else if (pid.charAt(0) === 'B') {
+              base.a = it.a; base.b = it.b;
+              base.choices = def.options;
+            } else {
+              base.word = it.word;
+              if (it.lookup) base.lookup = it.lookup;
+              if (it.bonus) base.bonus = true;
+              base.choices = shuffle(it.choices);
+            }
+            return base;
           })
-        });
-      }
-    }
-
-    /* Part D —— 题目顺序同样保持原书顺序，只打乱每个词的选项 */
-    var defD = defs.D;
-    if (defD) {
-      var dSrc = defD.items.filter(function (it) { return inSet('D', it); });
-      if (dSrc.length) {
-        parts.push({
-          id: 'D', title: defD.title, instruction: defD.instruction,
-          type: 'choice',
-          items: dSrc.map(function (it, i) {
-            return {
-              qid: 'D' + i, matchKey: matchKeyOf('D', it), word: it.word,
-              lookup: it.lookup, answer: it.answer, reason: it.reason,
-              bonus: !!it.bonus, choices: shuffle(it.choices)
-            };
-          })
-        });
-      }
-    }
+        };
+        if (isBank) {
+          // 重测时词库收窄到这些题答案涉及的词
+          out.bank = shuffle(def.bank.filter(function (w) {
+            return src.some(function (it) { return it.answer === w; });
+          }));
+        }
+        parts.push(out);
+      });
 
     return { parts: parts, answers: {}, submitted: false, retest: !!filt, level: CUR };
   }
@@ -1035,15 +1026,15 @@
     });
   }
 
-  /* 把一次提交的结果并入错题本：答错 → 记/累加；答对 → 移除（算是已经学会） */
-  /* 取某题「正确答案」的可读文字（记录时存下来，避免以后字母被重映射后对不上） */  function answerTextOf(it) {
-    if (it.choices) {
+  /* 取某题「正确答案」的可读文字（记录时存下来，避免以后字母被重映射后对不上） */
+  function answerTextOf(it) {    if (it.choices) {
       var hit = it.choices.filter(function (c) { return c.k === it.answer; })[0];
       return hit ? (hit.k + '. ' + hit.t) : String(it.answer);
     }
     if (it.matchKey && it.srcAnswer != null) {
       // 用渲染时那套（已重映射的）选项表查，才能与 it.answer 对得上
-      var pA = (quiz && quiz.parts.filter(function (p) { return p.id === 'A'; })[0]);
+      var pid = it.matchPartId;
+      var pA = quiz && quiz.parts.filter(function (p) { return p.id === pid; })[0];
       var ch = pA ? pA.choices.filter(function (c) { return c.key === it.answer; })[0] : null;
       return ch ? (ch.key + '. ' + ch.text) : String(it.answer);
     }
@@ -1116,15 +1107,16 @@
     var rawKey = String(rec.key == null ? '' : rec.key);
     var j0 = rawKey.indexOf('::');
     var base = j0 >= 0 ? rawKey.slice(j0 + 2) : rawKey;
-    if (p === 'A') {
+    if (/^A/.test(p)) {
       var w = byWord[base];
       // rec.answer 是**渲染时**重新映射过的字母，不能拿它去查别的表。
-      // 优先用记录时存下的文字；兜底用该级 Part A 的原始字母表。
+      // 优先用记录时存下的文字；兜底查该段的原始字母表。
       var fallback = '';
-      if (lvDef && lvDef.parts.A) {
-        var ao = lvDef.parts.A.items.filter(function (x) { return x.word === base; })[0];
+      var defA = lvDef && lvDef.parts[p];
+      if (defA) {
+        var ao = defA.items.filter(function (x) { return x.word === base; })[0];
         if (ao) {
-          var chA = VA.matchChoices(lv).filter(function (c) { return c.key === ao.answer; })[0];
+          var chA = VA.matchChoices(lv, p).filter(function (c) { return c.key === ao.answer; })[0];
           if (chA) fallback = chA.key + '. ' + chA.text;
         }
       }
@@ -1136,29 +1128,29 @@
         reason: w ? w.def : ''
       };
     }
-    if (p === 'B') {
-      var parts = base.split('|');
-      var defB = lvDef && lvDef.parts.B;
+    if (/^B/.test(p)) {
+      var pair = base.split('|');
+      var defB = lvDef && lvDef.parts[p];
       var hitB = defB ? defB.items.filter(function (x) { return x.a + '|' + x.b === base; })[0] : null;
       return {
-        kind: '同反义判断', title: parts[0] + '  vs  ' + parts[1],
+        kind: '同反义判断', title: pair[0] + '  vs  ' + pair[1],
         sub: '', prompt: '判断同义(S)还是反义(A)',
         answerText: rec.answerText ||
           (rec.answer === 'S' ? '同义 Synonyms' : '反义 Antonyms'),
         reason: (hitB && hitB.reason) || ''
       };
     }
-    if (p === 'C') {
+    if (/^C/.test(p)) {
       var txt = base.split('@@')[0];
-      var defC = lvDef && lvDef.parts.C;
+      var defC = lvDef && lvDef.parts[p];
       var hitC = defC ? defC.items.filter(function (x) { return x.text === txt; })[0] : null;
       return {
         kind: '选词填空', title: rec.answer, sub: '', prompt: rec.lastQuestion || txt,
         answerText: rec.answerText || rec.answer, reason: (hitC && hitC.reason) || ''
       };
     }
-    if (p === 'D') {
-      var defD = lvDef && lvDef.parts.D;
+    if (/^D/.test(p)) {
+      var defD = lvDef && lvDef.parts[p];
       var d = (defD ? defD.items.filter(function (x) {
         return (x.lookup || x.word) === base;
       })[0] : null) || {};

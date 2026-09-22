@@ -68,52 +68,70 @@ LEVELS.forEach(lv => {
   /* ---- 题目结构 ---- */
   console.log('\n--- 题目结构 ---');
   const parts = VA.partsOf(lv);
-  if (parts.length !== 4) bad(`应有 4 个部分，实际 ${parts.length}`);
+  // 每一级至少要有：词义连线段 + 同反义 + 选词填空 + 近义辨析
+  const hasType = t => parts.some(p => p.type === t);
+  ['match', 'choice', 'bank'].forEach(t => {
+    if (!hasType(t)) bad(`缺少类型为 ${t} 的题目段`);
+  });
   let total = 0;
   parts.forEach(p => { total += p.items.length; });
   const breakdown = parts.map(p => `${p.id}=${p.items.length}`).join(' ');
-  if (total !== 50) bad(`总题数应为 50，实际 ${total}（${breakdown}）`);
-  else ok(`总题数 50（${breakdown}）`);
+  // 题量下限：连线段合计覆盖 50 词为「满分」，少于 50 只是覆盖率不足（用提醒标注）
+  const matchTotal = parts.filter(p => p.type === 'match')
+    .reduce((s, p) => s + p.items.length, 0);
+  if (matchTotal > 50) bad(`词义连线段合计 ${matchTotal} 题，超过 50 个核心词`);
+  else if (matchTotal === 50) ok(`词义连线段合计 50 题（50 个核心词全部覆盖）`);
+  else wrn(`词义连线段合计 ${matchTotal} 题（50 词中覆盖 ${matchTotal} 个，其余只能在卡片/词汇表里学）`);
+  parts.filter(p => p.type !== 'match').forEach(p => {
+    if (p.items.length < 8) bad(`${p.id} 只有 ${p.items.length} 题（至少 8）`);
+  });
+  ok(`共 ${parts.length} 段、${total} 题（${breakdown}）`);
 
-  const defA = D.parts.A, defB = D.parts.B, defC = D.parts.C, defD = D.parts.D;
+  const defB = D.parts.B, defC = D.parts.C, defD = D.parts.D;
 
-  /* ---- Part A ---- */
-  console.log('\n--- Part A 词义连线 ---');
-  if (!defA) bad('缺少 Part A');
-  else {
-    if (defA.items.length !== 20) bad(`Part A 应 20 题，实际 ${defA.items.length}`);
+  /* ---- 词义连线段（A / A2 / A3 …，可以有多段） ---- */
+  console.log('\n--- 词义连线段 ---');
+  const matchParts = parts.filter(p => p.type === 'match');
+  if (!matchParts.length) bad('没有词义连线段');
+  let covA = 0;
+  matchParts.forEach(p => {
+    if (!p.items.length) { bad(`连线段 ${p.id} 没有题目`); return; }
+    if (p.items.length > 26) bad(`连线段 ${p.id} 有 ${p.items.length} 题，超过 26 个字母上限`);
     const letters = {};
-    defA.items.forEach(it => {
-      if (!seen[it.word]) bad(`Part A 的词 "${it.word}" 不在单词表里`);
-      if (!/^[A-Z]$/.test(it.answer)) bad(`Part A "${it.word}" 的答案不是单个大写字母: ${it.answer}`);
+    p.items.forEach(it => {
+      if (!seen[it.word]) bad(`${p.id} 的词 "${it.word}" 不在单词表里`);
+      if (!/^[A-Z]$/.test(it.answer)) bad(`${p.id} "${it.word}" 的答案不是单个大写字母: ${it.answer}`);
       letters[it.answer] = (letters[it.answer] || 0) + 1;
     });
-    const dupLetters = Object.keys(letters).filter(k => letters[k] > 1);
-    if (dupLetters.length) bad(`Part A 选项字母重复（连线题必须一一对应）: ${dupLetters.join(',')}`);
-    else ok(`20 题，选项字母互不重复`);
+    const dupL = Object.keys(letters).filter(k => letters[k] > 1);
+    if (dupL.length) bad(`${p.id} 选项字母重复（连线题必须一一对应）: ${dupL.join(',')}`);
+    if (Object.keys(letters).length !== p.items.length) {
+      bad(`${p.id} 选项字母数(${Object.keys(letters).length}) 与题数(${p.items.length}) 不一致`);
+    }
 
     // 关键校验：matchChoices 的 key 必须与 items 的 answer 对应
     // （曾因按下标另编字母，导致全对的人被判成错）
-    const mc = VA.matchChoices(lv);
+    const mc = VA.matchChoices(lv, p.id);
     const letterMap = {};
     mc.forEach(c => { letterMap[c.key] = c.text; });
     let wrongMap = 0;
-    defA.items.forEach(it => {
+    p.items.forEach(it => {
       const w = D.byWord[it.word];
-      if (!letterMap[it.answer]) { wrongMap++; bad(`matchChoices 缺字母 ${it.answer}（${it.word}）`); return; }
+      if (!letterMap[it.answer]) { wrongMap++; bad(`${p.id} matchChoices 缺字母 ${it.answer}（${it.word}）`); return; }
       if (letterMap[it.answer] !== w.zh) {
         wrongMap++;
-        bad(`matchChoices 字母 ${it.answer} 对应的是「${letterMap[it.answer]}」，应为「${w.zh}」(${it.word})`);
+        bad(`${p.id} 字母 ${it.answer} 对应「${letterMap[it.answer]}」，应为「${w.zh}」(${it.word})`);
       }
     });
-    if (!wrongMap) ok('matchChoices 的每个字母都对得上它代表那个词的释义');
-  }
+    if (!wrongMap && !dupL.length) ok(`${p.id}：${p.items.length} 题，字母互不重复、释义映射正确`);
+    covA += p.items.length;
+  });
+  if (matchParts.length > 1) ok(`共 ${matchParts.length} 个连线段，合计 ${covA} 题`);
 
   /* ---- Part B ---- */
   console.log('\n--- Part B 同反义 ---');
   if (!defB) bad('缺少 Part B');
   else {
-    if (defB.items.length !== 10) bad(`Part B 应 10 题，实际 ${defB.items.length}`);
     if (!defB.options.every(o => o.k && o.t)) bad('options 应为 {k,t} 形状');
     let l1 = 0, miss = 0;
     defB.items.forEach(it => {
@@ -123,8 +141,8 @@ LEVELS.forEach(lv => {
       if (inLevel) l1++;
       [it.a, it.b].forEach(w => { if (!seen[w]) miss++; });
     });
-    if (l1 === defB.items.length) ok('每对至少含一个本级词汇');
-    else wrn(`${defB.items.length - l1} 对两个词都不是本级词汇（会查不到释义）`);
+    if (l1 === defB.items.length) ok(`${defB.items.length} 对，每对至少含一个本级词汇`);
+    else wrn(`${defB.items.length - l1} 对两个词都不是本级词汇`);
     if (miss) wrn(`有 ${miss} 个题面词不在单词表里（错题页无释义可查）`);
   }
 
@@ -132,28 +150,28 @@ LEVELS.forEach(lv => {
   console.log('\n--- Part C 选词填空 ---');
   if (!defC) bad('缺少 Part C');
   else {
-    if (defC.items.length !== 10) bad(`Part C 应 10 题，实际 ${defC.items.length}`);
     const bankSet = {};
     defC.bank.forEach(w => { bankSet[w] = (bankSet[w] || 0) + 1; });
     const bankDup = Object.keys(bankSet).filter(k => bankSet[k] > 1);
     if (bankDup.length) bad('词库有重复项: ' + bankDup.join(', '));
     const ansList = defC.items.map(i => i.answer);
     if (new Set(ansList).size !== ansList.length) bad('Part C 答案有重复，与「每词只用一次」矛盾');
-    else ok('10 个答案互不重复');
     defC.items.forEach(it => {
       if (bankSet[it.answer] == null) bad(`Part C 答案 "${it.answer}" 不在词库里`);
       if ((it.text.match(/______/g) || []).length !== 1) bad(`Part C 空格数异常: ${it.text.slice(0, 40)}…`);
       if (!it.reason) wrn(`Part C "${it.answer}" 缺解析`);
     });
-    if (defC.bank.length !== 10) bad(`词库应 10 个词，实际 ${defC.bank.length}`);
-    else ok('词库 10 词无重复，每题恰好一个空格，答案都在词库内');
+    if (defC.bank.length < defC.items.length) {
+      bad(`词库(${defC.bank.length}) 少于题目数(${defC.items.length})，「每词只用一次」不成立`);
+    } else {
+      ok(`${defC.items.length} 题、词库 ${defC.bank.length} 词无重复，每题恰好一个空格，答案都在词库内`);
+    }
   }
 
   /* ---- Part D ---- */
   console.log('\n--- Part D 近义辨析 ---');
   if (!defD) bad('缺少 Part D');
   else {
-    if (defD.items.length !== 10) bad(`Part D 应 10 题，实际 ${defD.items.length}`);
     defD.items.forEach(it => {
       const ks = it.choices.map(c => c.k);
       if (ks.indexOf(it.answer) < 0) bad(`Part D "${it.word}" 答案 ${it.answer} 不在选项内`);
@@ -161,7 +179,7 @@ LEVELS.forEach(lv => {
       if (!it.choices.every(c => c.k && c.t)) bad(`Part D "${it.word}" 选项缺 k/t（会渲染成 undefined）`);
       if (!it.reason) wrn(`Part D "${it.word}" 缺解析`);
     });
-    ok('10 题，答案均为合法选项且选项字段完整');
+    ok(`${defD.items.length} 题，答案均为合法选项且选项字段完整`);
   }
 
   /* ---- matchKey 唯一性 ---- */
@@ -181,10 +199,10 @@ LEVELS.forEach(lv => {
   /* ---- 出题覆盖率 ---- */
   console.log('\n--- 出题覆盖率 ---');
   const asked = new Set();
-  defA.items.forEach(it => asked.add(it.word));
-  defC.items.forEach(it => asked.add(it.answer));
-  defB.items.forEach(it => { asked.add(it.a); asked.add(it.b); });
-  defD.items.forEach(it => asked.add(it.lookup || String(it.word).replace(/（.*$/, '')));
+  matchParts.forEach(p => p.items.forEach(it => asked.add(it.word)));
+  if (defC) defC.items.forEach(it => asked.add(it.answer));
+  if (defB) defB.items.forEach(it => { asked.add(it.a); asked.add(it.b); });
+  if (defD) defD.items.forEach(it => asked.add(it.lookup || String(it.word).replace(/（.*$/, '')));
   const uncovered = core.filter(w => !asked.has(w.word)).map(w => w.word);
   const cov = core.length - uncovered.length;
   ok(`${cov}/${core.length} 个核心词进入测验（${Math.round(cov / core.length * 100)}%）`);

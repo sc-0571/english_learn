@@ -16,8 +16,17 @@
 
 ## 级别
 
-页面顶部有「级别」下拉框，可切换 **Level 1** 与 **Level 2**（各 50 个 keyword，各 50 道题）。
-Level 3–10 显示为「待补」并禁用。
+页面顶部有「级别」下拉框，可切换 **Level 1 / 2 / 3**（各 50 个 keyword）。
+Level 4–10 显示为「待补」并禁用。
+
+| 级别 | 词数 | 题数 | 结构 |
+|---|---|---|---|
+| Level 1 | 50 | 50 | 连线段 A=20 + 同反义 10 + 填空 10 + 辨析 10 |
+| Level 2 | 50 | 50 | 同上 |
+| Level 3 | 50 | **87** | **3 个连线段（A/A2/A3）共 50 题** + 同反义 15 + 填空 12 + 辨析 10 |
+
+> Level 1/2 只对其中 20 个词出连线题（沿用原先的设计）；Level 3 起 50 个词全部进连线段。
+> 连线段可以有多段（id 用 `A` / `A2` / `A3`…），每段各自用 A..T 编号。
 
 **各级的进度、单词卡「已掌握」标记、错题本都是分开存的**，互不干扰；
 切级别时会记住上次用的级别（存在 `va.curLevel`）。
@@ -60,8 +69,10 @@ docs/index.html       应用本体（HTML + CSS + JS 全内联，除数据外无
 docs/data.js          题库核心：VA.registerLevel / matchChoices / matchKeyOf / bareKeyOf
 docs/data-level1.js   Level 1 数据（Word 1–50）
 docs/data-level2.js   Level 2 数据（Word 51–100）
+docs/data-level3.js   Level 3 数据（Word 101–150，含 3 个连线段）
 docs/verify.js        数据自检（纯 node，无依赖）
-docs/dom-test.js      jsdom 冒烟测试（需要 jsdom）
+docs/dom-test.js      jsdom 冒烟测试（Level 1/2 全流程）
+docs/test-level3.js   jsdom 测试（Level 3 多连线段专用）
 ```
 
 ## 跑测试
@@ -111,10 +122,13 @@ node docs/dom-test.js
 
 ### 数据格式要点
 
-- `words[].zh` 的中文释义**同时**用于词汇表、单词卡和 Part A 的选项文字
-  （`VA.matchChoices()` 从它生成），所以不用重复维护两处。
-- **Part A 的 `answer` 字母必须唯一**（20 题对应 20 个不同字母），
+- `words[].zh` 的中文释义**同时**用于词汇表、单词卡和连线段的选项文字
+  （`VA.matchChoices(lv, partId)` 从它生成），所以不用重复维护两处。
+- **连线段可以有多段**：`parts` 里用 `A` / `A2` / `A3`… 作 key。
+  每段各自用 A..T 编号（最多 26 题），`answer` 字母在该段内必须唯一。
+- **Part A 的 `answer` 字母必须唯一**（每段内一一对应），
   且选项文字取自对应词的 `zh`。`verify.js` 会检查「每个字母都对得上它代表那个词的释义」——
   这条校验曾经抓到过一个隐蔽 bug：按下标另编字母会让全对的人被判成错。
-- 题面里出现的词（Part B/D 的词对与选项）要在 `words` 里能查到释义，
+- 其余段的 key 用 `B` / `C` / `D`（`B*` 是 choice、`C*` 是 bank、`D*` 是 choice）。
+- 题面里出现的词（同反义词对、辨析选项）要在 `words` 里能查到释义，
   否则加 `extra: true` 补进去（这类词不计入 50 个核心词）。

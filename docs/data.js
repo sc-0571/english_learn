@@ -71,33 +71,41 @@ var VA = {
 
   getLevel: function (lv) { return VA_LEVELS[lv] || null; },
 
-  /* 某一级的题目数组（按 A/B/C/D 顺序） */
+  /* 某一级的题目数组。
+     Part 的 id 可以是 A / A2 / A3 …（多个词义连线段）或 B / C / D。
+     类型由 id 推断：A* → match、C* → bank、其余 → choice。 */
   partsOf: function (lv) {
     var d = VA_LEVELS[lv];
     if (!d) return [];
-    return ['A', 'B', 'C', 'D'].map(function (k) {
+    return Object.keys(d.parts).map(function (k) {
       var p = d.parts[k];
-      if (!p) return null;
+      if (!p || !p.items) return null;
+      var type = p.type || (/^A/.test(k) ? 'match' : (/^C/.test(k) ? 'bank' : 'choice'));
       return {
-        id: k, title: p.title, instruction: p.instruction,
-        type: p.type || (k === 'A' ? 'match' : (k === 'C' ? 'bank' : 'choice')),
+        id: k, title: p.title, instruction: p.instruction, type: type,
         choices: p.choices, options: p.options, bank: p.bank, items: p.items
       };
     }).filter(Boolean);
   },
 
-  /* Part A 的选项表：从单词的 zh 释义生成。
-     注意：选项字母用 items[i].answer 本身，**不能**按数组下标另编字母 ——
-     数据里 answer 字母是出题时定好的（可能不按顺序），按下标重编会让
-     全对的人被判成错。key 必须与其代表那条 items 的 answer 一致。 */
-  matchChoices: function (lv) {
+  /* 某个「词义连线」段的选项表：从单词的 zh 释义生成。
+     注意：选项字母用 it.answer 本身，**不能**按数组下标另编字母 ——
+     数据里 answer 字母是出题时定好的，按下标重编会让全对的人被判成错。
+     key 必须与其代表那条 item 的 answer 一致。 */
+  matchChoices: function (lv, partId) {
+    var pid = partId || 'A';
     var d = VA_LEVELS[lv];
-    if (!d) return [];
-    var a = (d.parts.A && d.parts.A.items) || [];
-    return a.map(function (it) {
+    if (!d || !d.parts[pid]) return [];
+    return d.parts[pid].items.map(function (it) {
       var w = d.byWord[it.word] || {};
       return { key: it.answer, text: w.zh || it.word, answer: it.answer };
     });
+  },
+
+  /* 取某一段的原始定义 */
+  partDef: function (lv, partId) {
+    var d = VA_LEVELS[lv];
+    return (d && d.parts[partId]) || null;
   },
 
   /* 查某个词的释义（错题页 / 报告用） */
@@ -107,15 +115,14 @@ var VA = {
   },
 
   /* 每题在错题本里的稳定标识。
-     必须带 Part 前缀：同一个词可能既出现在 Part A（选释义）又出现在
-     Part D（近义辨析），若只用单词做 key，两条记录会互相覆盖。 */
+     必须带 Part 前缀：同一个词可能既出现在连线段（选释义）又出现在
+     近义辨析段（D），若只用单词做 key，两条记录会互相覆盖。 */
   matchKeyOf: function (partId, it) {
     var base;
-    if (partId === 'A') base = it.word;
-    else if (partId === 'B') base = it.a + '|' + it.b;
-    else if (partId === 'C') base = it.text + '@@' + it.answer;
-    else if (partId === 'D') base = it.lookup || it.word;
-    else base = null;
+    if (/^A/.test(partId)) base = it.word;
+    else if (/^B/.test(partId)) base = it.a + '|' + it.b;
+    else if (/^C/.test(partId)) base = it.text + '@@' + it.answer;
+    else base = it.lookup || it.word;
     return base == null ? null : partId + '::' + base;
   },
 
